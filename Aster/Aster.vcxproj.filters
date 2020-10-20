@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Main">
+      <UniqueIdentifier>{1fbdac94-53e9-4a3a-a035-11b9390f2b9c}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main\window.cc" />
+    <ClCompile Include="logger.cc" />
+    <ClCompile Include="global.cc" />
+    <ClCompile Include="main\context.cc" />
+    <ClCompile Include="main\swapchain.cc" />
+    <ClCompile Include="main\device.cc" />
+    <ClCompile Include="util\files.cc" />
+    <ClCompile Include="source.cc">
+      <Filter>Main</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="global.h" />
+    <ClInclude Include="Main\window.h" />
+    <ClInclude Include="main\context.h" />
+    <ClInclude Include="logger.h" />
+    <ClInclude Include="constants.h" />
+    <ClInclude Include="config.h" />
+    <ClInclude Include="vma\vk_mem_alloc.h" />
+    <ClInclude Include="vma\vk_mem_alloc.hpp" />
+    <ClInclude Include="main\swapchain.h" />
+    <ClInclude Include="main\device.h" />
+    <ClInclude Include="main\glfw_context.h" />
+    <ClInclude Include="util\files.h" />
+  </ItemGroup>
+</Project>

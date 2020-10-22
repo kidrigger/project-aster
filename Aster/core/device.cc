@@ -1,11 +1,11 @@
 /*=========================================*/
-/*  Aster: main/device.cc                  */
+/*  Aster: core/device.cc                  */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #include "device.h"
 
-#include <main/context.h>
-#include <main/window.h>
+#include <core/context.h>
+#include <core/window.h>
 #include <EASTL/vector.h>
 #include <EASTL/vector_set.h>
 

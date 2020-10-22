@@ -1,5 +1,5 @@
 /*=========================================*/
-/*  Aster: main/context.cc                 */
+/*  Aster: core/context.cc                 */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #include "context.h"

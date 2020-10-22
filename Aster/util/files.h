@@ -1,5 +1,5 @@
 /*=========================================*/
-/*  Aster: main/files.h                    */
+/*  Aster: core/files.h                    */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #pragma once

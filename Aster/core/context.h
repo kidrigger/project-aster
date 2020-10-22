@@ -1,5 +1,5 @@
 /*=========================================*/
-/*  Aster: main/context.h                  */
+/*  Aster: core/context.h                  */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #pragma once
@@ -10,7 +10,7 @@
 #include <EASTL/vector_set.h>
 #include <EASTL/vector_map.h>
 
-#include <main/window.h>
+#include <core/window.h>
 
 /**
  * @class Context

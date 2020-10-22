@@ -1,5 +1,5 @@
 /*=========================================*/
-/*  Aster: main/files.cc                   */
+/*  Aster: core/files.cc                   */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #include "files.h"

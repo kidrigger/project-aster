@@ -165,23 +165,23 @@
   <ItemGroup>
     <ClCompile Include="global.cc" />
     <ClCompile Include="logger.cc" />
-    <ClCompile Include="main\context.cc" />
-    <ClCompile Include="main\device.cc" />
+    <ClCompile Include="core\context.cc" />
+    <ClCompile Include="core\device.cc" />
     <ClCompile Include="source.cc" />
-    <ClCompile Include="main\swapchain.cc" />
-    <ClCompile Include="main\window.cc" />
+    <ClCompile Include="core\swapchain.cc" />
+    <ClCompile Include="core\window.cc" />
     <ClCompile Include="util\files.cc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="config.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="global.h" />
-    <ClInclude Include="main\context.h" />
+    <ClInclude Include="core\context.h" />
     <ClInclude Include="logger.h" />
-    <ClInclude Include="main\device.h" />
-    <ClInclude Include="main\glfw_context.h" />
-    <ClInclude Include="main\swapchain.h" />
-    <ClInclude Include="Main\window.h" />
+    <ClInclude Include="core\device.h" />
+    <ClInclude Include="core\glfw_context.h" />
+    <ClInclude Include="core\swapchain.h" />
+    <ClInclude Include="core\window.h" />
     <ClInclude Include="util\files.h" />
     <ClInclude Include="vma\vk_mem_alloc.h" />
     <ClInclude Include="vma\vk_mem_alloc.hpp" />

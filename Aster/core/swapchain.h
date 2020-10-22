@@ -1,15 +1,15 @@
 /*=========================================*/
-/*  Aster: main/swapchain.h                */
+/*  Aster: core/swapchain.h                */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #pragma once
 
 #include <global.h>
-#include <main/context.h>
+#include <core/context.h>
 #include <EASTL/fixed_vector.h>
 
-#include <main/window.h>
-#include <main/device.h>
+#include <core/window.h>
+#include <core/device.h>
 
 struct SurfaceSupportDetails
 {

@@ -1,5 +1,5 @@
 /*=========================================*/
-/*  Aster: main/swapchain.cc               */
+/*  Aster: core/swapchain.cc               */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #include "swapchain.h"
@@ -73,8 +73,14 @@ void Swapchain::init(const stl::string& _name, const Window* _window, const Devi
 	_device->set_object_name(swapchain, name);
 
 	tie(result, images) = _device->device.getSwapchainImagesKHR(swapchain);
-	ERROR_IF(failed(result), "Could not fetch images with "s + to_string(result)) THEN_CRASH(result);
+	ERROR_IF(failed(result), stl::fmt("Could not fetch images with %s", to_cstring(result))) THEN_CRASH(result);
 
+	u32 i_ = 0;
+	for (auto& image_ : images) {
+		_device->set_object_name(image_, stl::fmt("%s_image_%u", name.data(), i_++));
+	}
+
+	i_ = 0;
 	for (auto& image : images) {
 		tie(result, image_views.emplace_back()) = parent_device->device.createImageView({
 			.image = image,
@@ -88,11 +94,16 @@ void Swapchain::init(const stl::string& _name, const Window* _window, const Devi
 				.baseArrayLayer = 0,
 				.layerCount = 1,
 			},
-			});
-		ERROR_IF(failed(result), "Image View Creation failed with "s + to_string(result)) THEN_CRASH(result) ELSE_VERBOSE("Image view created");
+		});
+		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
 	}
 
-	INFO(stl::fmt("Number of swapchain images %d", image_count));
+	i_ = 0;
+	for (auto& image_ : images) {
+		_device->set_object_name(image_, stl::fmt("%s_view_%u", name.data(), i_++));
+	}
+
+	INFO(stl::fmt("Number of swapchain images in %s %d", name.data(), image_count));
 }
 
 void Swapchain::destroy() noexcept {
@@ -100,5 +111,5 @@ void Swapchain::destroy() noexcept {
 		parent_device->device.destroyImageView(image_view);
 	}
 	parent_device->device.destroySwapchainKHR(swapchain);
-	INFO("Swapchain '" + name + "' destroyed");
+	INFO(stl::fmt("Swapchain '%s' destroyed", name.data()));
 }

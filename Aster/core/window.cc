@@ -1,11 +1,11 @@
 /*=========================================*/
-/*  Aster: main/window.cc	               */
+/*  Aster: core/window.cc	               */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #include "window.h"
 #include <logger.h>
-#include <main/context.h>
-#include <main/glfw_context.h>
+#include <core/context.h>
+#include <core/glfw_context.h>
 
 void Window::init(const Context* _context, u32 _width, u32 _height, const stl::string& _title, b8 _full_screen) noexcept {
 	extent = vk::Extent2D{ .width = _width, .height = _height };

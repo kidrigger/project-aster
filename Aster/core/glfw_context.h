@@ -1,5 +1,5 @@
 /*=========================================*/
-/*  Aster: main/glfw_context.h             */
+/*  Aster: core/glfw_context.h             */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #pragma once

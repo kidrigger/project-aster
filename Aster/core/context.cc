@@ -20,7 +20,7 @@ VKAPI_ATTR b32 VKAPI_CALL Context::debug_callback(VkDebugUtilsMessageSeverityFla
 		if (severity & SeverityBits::eVerbose) VERBOSE(_callback_data->pMessage);
 	}
 
-	return VK_FALSE;
+	return false;
 }
 
 void Context::init(const stl::string& _app_name, const Version& _app_version) noexcept {

@@ -51,9 +51,9 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 	}
 
 	vk::PhysicalDeviceFeatures enabled_device_features = {
-		.depthClamp = VK_TRUE,
-		.samplerAnisotropy = VK_TRUE,
-		.shaderSampledImageArrayDynamicIndexing = VK_TRUE,
+		.depthClamp = true,
+		.samplerAnisotropy = true,
+		.shaderSampledImageArrayDynamicIndexing = true,
 	};
 
 	tie(result, device) = physical_device.createDevice({

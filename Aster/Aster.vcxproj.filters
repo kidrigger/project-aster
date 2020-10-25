@@ -31,4 +31,8 @@
     <ClInclude Include="core\swapchain.h" />
     <ClInclude Include="core\window.h" />
   </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="res\shader.fs.hlsl" />
+    <FxCompile Include="res\shader.vs.hlsl" />
+  </ItemGroup>
 </Project>

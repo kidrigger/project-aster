@@ -65,7 +65,7 @@ void Swapchain::init(const stl::string& _name, const Window* _window, const Devi
 		.preTransform = support.capabilities.currentTransform,
 		.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
 		.presentMode = present_mode,
-		.clipped = VK_TRUE,
+		.clipped = true,
 		.oldSwapchain = vk::SwapchainKHR(),
 		});
 	ERROR_IF(failed(result), stl::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstring(result))) ELSE_INFO(stl::fmt("Swapchain '%s' created!", name.data()));

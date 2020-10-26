@@ -33,21 +33,20 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 	}
 
 	// Logical Device
-	stl::fixed_vector<vk::DeviceQueueCreateInfo, 4> queue_create_infos;
-	stl::vector_set<u32> unique_queue_families = {
-		queue_families.graphics_idx,
-		queue_families.present_idx,
-		queue_families.transfer_idx,
-		queue_families.has_compute() ? queue_families.compute_idx : queue_families.graphics_idx,
-	};
+	stl::vector_map<u32, u32> unique_queue_families;
+	unique_queue_families[queue_families.graphics_idx]++;
+	unique_queue_families[queue_families.present_idx]++;
+	unique_queue_families[queue_families.transfer_idx]++;
+	unique_queue_families[queue_families.compute_idx]++;
 
-	f32 queue_priority = 1.0f;
-	for (u32 queue_family : unique_queue_families) {
+	stl::array<f32, 4> queue_priority = { 1.0f, 1.0f, 1.0f, 1.0f };
+	stl::fixed_vector<vk::DeviceQueueCreateInfo, 4> queue_create_infos;
+	for (auto [index_, count_] : unique_queue_families) {
 		queue_create_infos.push_back({
-			.queueFamilyIndex = queue_family,
-			.queueCount = 1,
-			.pQueuePriorities = &queue_priority,
-			});
+			.queueFamilyIndex = index_,
+			.queueCount = count_,
+			.pQueuePriorities = queue_priority.data(),
+		});
 	}
 
 	vk::PhysicalDeviceFeatures enabled_device_features = {
@@ -68,31 +67,21 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 	ERROR_IF(failed(result), "Failed to create a logical device with "s + to_string(result)) THEN_CRASH(result) ELSE_INFO("Logical Device Created!");
 
 	// Setup queues
-	queues.graphics = device.getQueue(queue_families.graphics_idx, 0);
-	queues.present = device.getQueue(queue_families.present_idx, 0);
-	queues.transfer = device.getQueue(queue_families.transfer_idx, 0);
-	if (queue_families.has_compute()) {
-		queues.compute = device.getQueue(queue_families.graphics_idx, 0);
+	{
+		u32 cidx = --unique_queue_families[queue_families.compute_idx];
+		u32 tidx = --unique_queue_families[queue_families.transfer_idx];
+		u32 pidx = --unique_queue_families[queue_families.present_idx];
+		u32 gidx = --unique_queue_families[queue_families.graphics_idx];
+
+		queues.graphics = device.getQueue(queue_families.graphics_idx, gidx);
+		queues.present = device.getQueue(queue_families.present_idx, pidx);
+		queues.transfer = device.getQueue(queue_families.transfer_idx, tidx);
+		queues.compute = device.getQueue(queue_families.graphics_idx, cidx);
+		INFO(stl::fmt("Graphics Queue Index: (%i, %i)", queue_families.graphics_idx, gidx));
+		INFO(stl::fmt("Present Queue Index: (%i, %i)", queue_families.present_idx, pidx));
+		INFO(stl::fmt("Transfer Queue Index: (%i, %i)", queue_families.transfer_idx, tidx));
+		INFO(stl::fmt("Compute Queue Index: (%i, %i)", queue_families.compute_idx, cidx));
 	}
-	INFO(stl::fmt("Graphics Queue Index: %i", queue_families.graphics_idx));
-	INFO(stl::fmt("Present Queue Index: %i", queue_families.present_idx));
-	INFO(stl::fmt("Transfer Queue Index: %i", queue_families.transfer_idx));
-	WARN_IF(!queue_families.has_compute(), "No compute queue on device") ELSE_INFO(stl::fmt("Compute Queue Index: %i", queue_families.compute_idx));
-
-	// Command Pools
-	// Transient Transfer queue for quick transfers and mipmapping blitting etc.
-	tie(result, command_pools.transient_transfer) = device.createCommandPool({
-		.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-		.queueFamilyIndex = queue_families.transfer_idx,
-	});
-	ERROR_IF(failed(result), "Transient Transfer command pool failed creation") THEN_CRASH(result);
-
-	// Persistent Graphics queue to use for normal frame rendering.
-	tie(result, command_pools.persistent_graphics) = device.createCommandPool({
-		.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-		.queueFamilyIndex = queue_families.graphics_idx,
-	});
-	ERROR_IF(failed(result), "Persistent Graphics command pool failed creation") THEN_CRASH(result);
 
 	tie(result, allocator) = vma::createAllocator({
 		.physicalDevice = physical_device,
@@ -101,15 +90,13 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 	});
 	ERROR_IF(failed(result), "Memory allocator creation failed") THEN_CRASH(result) ELSE_INFO("Memory Allocator Created");
 
-	set_object_name(device, name);
+	set_name(name);
 
 	INFO(stl::fmt("Created Device '%s' Successfully", name.data()));
 }
 
 void Device::destroy() noexcept {
 	allocator.destroy();
-	device.destroyCommandPool(command_pools.transient_transfer);
-	device.destroyCommandPool(command_pools.persistent_graphics);
 	device.destroy();
 	INFO("Device '" + name + "' Destroyed");
 }
@@ -177,7 +164,8 @@ i32 Device::device_score(const Context* _context, const Window* _window, vk::Phy
 void Device::set_name(const stl::string& _name) noexcept {
 	VERBOSE(stl::fmt("Device %s -> %s", name.data(), _name.data()));
 	name = _name;
-	set_object_name(device, _name);
+	set_object_name(physical_device, stl::fmt("GPU %s", _name.data()));
+	set_object_name(device, stl::fmt("Device %s", _name.data()));
 }
 
 QueueFamilyIndices Device::get_queue_families(const Window* _window, vk::PhysicalDevice _device) noexcept {
@@ -187,6 +175,7 @@ QueueFamilyIndices Device::get_queue_families(const Window* _window, vk::Physica
 
 	u32 i = 0;
 	for (const auto& queueFamily : queue_families_) {
+		u32 this_family_count = 0;
 		VERBOSE(stl::fmt("Queue(%i): %s", i, to_string(queueFamily.queueFlags).data()));
 
 		if (queueFamily.queueCount <= 0) {
@@ -195,20 +184,40 @@ QueueFamilyIndices Device::get_queue_families(const Window* _window, vk::Physica
 		}
 
 		if (!indices.has_graphics() && (queueFamily.queueFlags & vk::QueueFlagBits::eGraphics)) {
-			indices.graphics_idx = i;
+			if (queueFamily.queueCount > this_family_count) {
+				indices.graphics_idx = i;
+				++this_family_count;
+			} else {
+				continue;
+			}
 		}
 
 		if (!indices.has_compute() && (queueFamily.queueFlags & vk::QueueFlagBits::eCompute)) {
-			indices.compute_idx = i;
+			if (queueFamily.queueCount > this_family_count) {
+				indices.compute_idx = i;
+				++this_family_count;
+			} else {
+				continue;
+			}
 		}
 
 		if (!indices.has_transfer() && (queueFamily.queueFlags & vk::QueueFlagBits::eTransfer)) {
-			indices.transfer_idx = i;
+			if (queueFamily.queueCount > this_family_count) {
+				indices.transfer_idx = i;
+				++this_family_count;
+			} else {
+				continue;
+			}
 		}
 
 		auto [result, is_present_supported] = _device.getSurfaceSupportKHR(i, _window->surface);
 		if (!indices.has_present() && !failed(result) && is_present_supported) {
-			indices.present_idx = i;
+			if (queueFamily.queueCount > this_family_count) {
+				indices.present_idx = i;
+				++this_family_count;
+			} else {
+				continue;
+			}
 		}
 
 		++i;

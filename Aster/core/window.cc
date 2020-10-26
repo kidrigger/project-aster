@@ -66,3 +66,12 @@ void Window::window_resize_callback(GLFWwindow* _window, i32 _width, i32 _height
 		callback_fn(window->extent);
 	}
 }
+
+Window::CallbackHandle Window::add_resize_callback(ResizeCallbackFn&& fn) {
+	resize_callbacks.push_front(stl::move(fn));
+	return resize_callbacks.cbegin();
+}
+
+void Window::remove_resize_callback(CallbackHandle& handle) {
+	resize_callbacks.erase(handle);
+}

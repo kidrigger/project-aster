@@ -133,5 +133,6 @@ extern Logger g_logger;
 
 #endif // !defined(VERBOSE_LOG_DISABLED)
 
+#define DO(code) , code
 #define CRASH(code) exit(cast<i32>(code))
 #define THEN_CRASH(code) ,CRASH(code)

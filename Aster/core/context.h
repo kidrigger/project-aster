@@ -10,8 +10,6 @@
 #include <EASTL/vector_set.h>
 #include <EASTL/vector_map.h>
 
-#include <core/window.h>
-
 /**
  * @class Context
  *

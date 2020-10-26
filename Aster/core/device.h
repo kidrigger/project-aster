@@ -5,9 +5,8 @@
 #pragma once
 
 #include <global.h>
-
-struct Context;
-struct Window;
+#include <core/context.h>
+#include <core/window.h>
 
 struct QueueFamilyIndices {
 	static constexpr u32 INVALID_VALUE = 0xFFFFFFFFu;
@@ -41,11 +40,6 @@ struct Queues {
 	Option<vk::Queue> compute;
 };
 
-struct CommandPools {
-	vk::CommandPool transient_transfer;
-	vk::CommandPool persistent_graphics;
-};
-
 struct Device {
 
 	void init(const stl::string& name, const Context* context, const Window* window) noexcept;
@@ -71,7 +65,6 @@ struct Device {
 	QueueFamilyIndices queue_families;
 	vk::Device device;
 	Queues queues;
-	CommandPools command_pools;
 	vma::Allocator allocator;
 
 	stl::string name;

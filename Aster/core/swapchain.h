@@ -8,8 +8,8 @@
 #include <core/context.h>
 #include <EASTL/fixed_vector.h>
 
-#include <core/window.h>
 #include <core/device.h>
+#include <core/window.h>
 
 struct SurfaceSupportDetails
 {
@@ -48,11 +48,9 @@ struct Swapchain {
 	std::vector<vk::ImageView> image_views;
 	u32 image_count{ 0 };
 
-	void init(const stl::string& _name, const Window* _window, const Device* _device) noexcept;
+	void init(const stl::string& _name, Window* _window, Device* _device) noexcept;
 
-	void recreate() noexcept {
-		ERROR("Unimplemented") THEN_CRASH(0);
-	}
+	void recreate() noexcept;
 
 	void destroy() noexcept;
 

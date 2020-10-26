@@ -17,11 +17,6 @@
 #include <EASTL/vector.h>
 #include <EASTL/vector_map.h>
 
-struct Layout {
-	vk::PipelineLayout pipeline_layout;
-	stl::vector<vk::DescriptorSetLayout> descriptor_layout;
-};
-
 int main() {
 
 	g_logger.set_minimum_logging_level(Logger::LogType::eInfo);
@@ -104,17 +99,27 @@ int main() {
 	});
 	ERROR_IF(failed(result), stl::fmt("Renderpass creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
 
-	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		tie(result, framebuffers.push_back()) = device.device.createFramebuffer({
-			.renderPass = renderpass,
-			.attachmentCount = 1,
-			.pAttachments = &swapchain.image_views[i],
-			.width = window.extent.width,
-			.height = window.extent.height,
-			.layers = 1,
-		});
-		ERROR_IF(failed(result), stl::fmt("Framebuffer creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer Created");
-	}
+	auto recreate_framebuffers = [&renderpass, &device, &framebuffers, &swapchain]() {
+		vk::Result result;
+		for (auto& fb : framebuffers) {
+			device.device.destroyFramebuffer(fb);
+		}
+		framebuffers.resize(swapchain.image_count);
+
+		for (u32 i = 0; i < swapchain.image_count; ++i) {
+			tie(result, framebuffers[i]) = device.device.createFramebuffer({
+				.renderPass = renderpass,
+				.attachmentCount = 1,
+				.pAttachments = &swapchain.image_views[i],
+				.width = swapchain.extent.width,
+				.height = swapchain.extent.height,
+				.layers = 1,
+			});
+			ERROR_IF(failed(result), stl::fmt("Framebuffer creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer Created");
+		}
+	};
+
+	recreate_framebuffers();
 
 	struct Vertex {
 		vec4 position;
@@ -153,25 +158,11 @@ int main() {
 		.primitiveRestartEnable = false,
 	};
 
-	vk::Viewport viewport = {
-		.x = 0,
-		.y = 0,
-		.width = cast<f32>(window.extent.width),
-		.height = cast<f32>(window.extent.height),
-		.minDepth = 0.0f,
-		.maxDepth = 1.0f,
-	};
-
-	vk::Rect2D scissor = {
-		.offset = {0, 0},
-		.extent = window.extent,
-	};
-
 	vk::PipelineViewportStateCreateInfo vsci = {
 		.viewportCount = 1,
-		.pViewports = &viewport,
+		.pViewports = nullptr,
 		.scissorCount = 1,
-		.pScissors = &scissor,
+		.pScissors = nullptr,
 	};
 
 	vk::PipelineRasterizationStateCreateInfo rsci = {
@@ -208,6 +199,12 @@ int main() {
 		.pAttachments = &cbas,
 	};
 
+	stl::array<vk::DynamicState, 2> dynamic_states = { vk::DynamicState::eScissor, vk::DynamicState::eViewport };
+	vk::PipelineDynamicStateCreateInfo dsci = {
+		.dynamicStateCount = cast<u32>(dynamic_states.size()),
+		.pDynamicStates = dynamic_states.data(),
+	};
+
 	tie(result, pipeline) = device.device.createGraphicsPipeline({/*Cache*/}, {
 		.stageCount = cast<u32>(ssci.size()),
 		.pStages = ssci.data(),
@@ -217,6 +214,7 @@ int main() {
 		.pRasterizationState = &rsci,
 		.pMultisampleState = &msci,
 		.pColorBlendState = &cbsci,
+		.pDynamicState = &dsci,
 		.layout = layout,
 		.renderPass = renderpass,
 	});
@@ -280,7 +278,11 @@ int main() {
 		u32 image_idx;
 
 		tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, image_available_sem[frame_idx], {});
-		ERROR_IF(failed(result), stl::fmt("Image acquire failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Image Acquired");
+
+		INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()));
+		INFO_IF(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
+		ELSE_IF_ERROR(failed(result), stl::fmt("Image acquire failed with %s", to_cstring(result))) THEN_CRASH(result)
+		ELSE_VERBOSE("Image Acquired");
 
 		result = device.device.waitForFences({ in_flight_fence[image_idx] }, true, max_value<u64>);
 		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
@@ -295,10 +297,26 @@ int main() {
 		vk::ClearValue clear_val(std::array{ 0.0f, 0.0f, 0.0f, 1.0f });
 		// Record Commands
 
+		cmd.setViewport(0, {{
+			.x = 0,
+			.y = 0,
+			.width = cast<f32>(swapchain.extent.width),
+			.height = cast<f32>(swapchain.extent.height),
+			.minDepth = 0.0f,
+			.maxDepth = 1.0f,
+		}});
+		cmd.setScissor(0, { {
+			.offset = {0, 0},
+			.extent = swapchain.extent,
+		} });
+
 		cmd.beginRenderPass({
 			.renderPass = renderpass,
 			.framebuffer = framebuffers[image_idx],
-			.renderArea = scissor,
+			.renderArea = {
+				.offset = {0, 0},
+				.extent = swapchain.extent,
+			},
 			.clearValueCount = 1,
 			.pClearValues  = &clear_val,
 		}, vk::SubpassContents::eInline);
@@ -336,26 +354,16 @@ int main() {
 			.pSwapchains = &swapchain.swapchain,
 			.pImageIndices = &image_idx,
 		});
-		ERROR_IF(failed(result), stl::fmt("Present failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Present");
+		INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()));
+		INFO_IF(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
+		ELSE_IF_ERROR(failed(result), stl::fmt("Present failed with %s", to_cstring(result))) THEN_CRASH(result)
+		ELSE_VERBOSE("Present");
 
 		frame_idx = (frame_idx + 1) % swapchain.image_count;
-
-		/*
-		if (result == VK_ERROR_OUT_OF_DATE_KHR || windowResized)
-		{
-			windowResized = false;
-			recreateSwapchain();
-			return;
-		}
-		else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-		{
-			throw runtime_error("Image acquiring failed with " + to_string(result));
-		}
-
-		currentFrame = (currentFrame + 1) % maxFrameInFlight;*/
 	}
 
-	device.device.waitIdle();
+	result = device.device.waitIdle();
+	ERROR_IF(failed(result), stl::fmt("Idling failed with %s", to_cstring(result)));
 
 	for (u32 i = 0; i < swapchain.image_count; ++i) {
 		device.device.destroySemaphore(image_available_sem[i]);

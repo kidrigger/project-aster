@@ -15,7 +15,12 @@
 #include <util/files.h>
 
 #include <EASTL/vector.h>
+#include <EASTL/fixed_vector.h>
 #include <EASTL/vector_map.h>
+
+struct ThreadContext {
+	stl::fixed_vector<vk::CommandPool, 3> command_pools;
+};
 
 int main() {
 
@@ -44,19 +49,21 @@ int main() {
 	ERROR_IF(failed(result), stl::fmt("Layout creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Layout Created");
 
 	// Shaders
-	auto vertex_code = load_binary32_file(R"(shader.vs.spv)");
+	auto vertex_code = load_binary32_file(R"(res/shaders/shader.vs.spv)");
 	tie(result, shaders[0]) = device.device.createShaderModule(vk::ShaderModuleCreateInfo{
 		.codeSize = sizeof(u32) * vertex_code.size(),
 		.pCode = vertex_code.data()
 	});
 	ERROR_IF(failed(result), stl::fmt("Vertex shader creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Vertex Shader Created");
+	device.set_object_name(shaders[0], R"(shader.vs)");
 
-	auto pixel_code = load_binary32_file(R"(shader.fs.spv)");
+	auto pixel_code = load_binary32_file(R"(res/shaders/shader.fs.spv)");
 	tie(result, shaders[1]) = device.device.createShaderModule(vk::ShaderModuleCreateInfo{
 		.codeSize = sizeof(u32) * pixel_code.size(),
 		.pCode = pixel_code.data()
 	});
 	ERROR_IF(failed(result), stl::fmt("Fragment shader creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Frahment Shader Created");
+	device.set_object_name(shaders[1], R"(shader.fs)");
 
 	vk::AttachmentDescription attach_desc = {
 		.format = swapchain.format,
@@ -98,6 +105,7 @@ int main() {
 		.pDependencies = &dependency,
 	});
 	ERROR_IF(failed(result), stl::fmt("Renderpass creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
+	device.set_object_name(renderpass, "Triangle Draw Pass");
 
 	auto recreate_framebuffers = [&renderpass, &device, &framebuffers, &swapchain]() {
 		vk::Result result;
@@ -227,25 +235,18 @@ int main() {
 	});
 
 	// Vertices
-	std::pair<vk::Buffer, vma::Allocation> buffer;
-	tie(result, buffer) = device.allocator.createBuffer({
-		.size = 4 * sizeof(Vertex),
-		.usage = vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer,
-		.sharingMode = vk::SharingMode::eExclusive,
-	}, {
-		.usage = vma::MemoryUsage::eCpuToGpu,
-	});
-	device.set_object_name(buffer.first, "Vertex Buffer");
+	Buffer buffer;
+	tie(result, buffer) = device.create_buffer("Triangle VB", 4 * sizeof(Vertex), vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer, vma::MemoryUsage::eCpuToGpu);
 	{
 		void* mapped_memory;
-		tie(result, mapped_memory) = device.allocator.mapMemory(buffer.second);
+		tie(result, mapped_memory) = device.allocator.mapMemory(buffer.allocation);
 		ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
 		auto vertices = cast<Vertex*>(mapped_memory);
 		vertices[0] = { vec4(0.0f, 0.5f, 0.5f, 1.0f), vec4(1.0f, 0.0f, 0.0f, 1.0f) };
 		vertices[1] = { vec4(0.5f, -0.5f, 0.5f, 1.0f), vec4(0.0f, 1.0f, 0.0f, 1.0f) };
 		vertices[2] = { vec4(-0.5f, -0.5f, 0.5f, 1.0f), vec4(0.0f, 0.0f, 1.0f, 1.0f) };
 		vertices[3] = vertices[0];
-		device.allocator.unmapMemory(buffer.second);
+		device.allocator.unmapMemory(buffer.allocation);
 	};
 
 	stl::fixed_vector<vk::Semaphore, 3> image_available_sem;
@@ -275,14 +276,20 @@ int main() {
 
 	u32 frame_idx = 0;
 	while (window.poll()) {
+
+		OPTICK_FRAME("Main frame");
 		u32 image_idx;
 
-		tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, image_available_sem[frame_idx], {});
+		{
+			OPTICK_EVENT("Acquire");
 
-		INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()));
-		INFO_IF(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
-		ELSE_IF_ERROR(failed(result), stl::fmt("Image acquire failed with %s", to_cstring(result))) THEN_CRASH(result)
-		ELSE_VERBOSE("Image Acquired");
+			tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, image_available_sem[frame_idx], {});
+
+			INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()))
+			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
+			ELSE_IF_ERROR(failed(result), stl::fmt("Image acquire failed with %s", to_cstring(result))) THEN_CRASH(result)
+			ELSE_VERBOSE("Image Acquired");
+		}
 
 		result = device.device.waitForFences({ in_flight_fence[image_idx] }, true, max_value<u64>);
 		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
@@ -310,6 +317,11 @@ int main() {
 			.extent = swapchain.extent,
 		} });
 
+		cmd.beginDebugUtilsLabelEXT(vk::DebugUtilsLabelEXT{
+			.pLabelName = "Triangle Draw",
+			.color = std::array{0.0f, 1.0f, 0.0f, 0.0f},
+		});
+
 		cmd.beginRenderPass({
 			.renderPass = renderpass,
 			.framebuffer = framebuffers[image_idx],
@@ -322,10 +334,12 @@ int main() {
 		}, vk::SubpassContents::eInline);
 
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
-		cmd.bindVertexBuffers(0, { buffer.first }, { 0 });
+		cmd.bindVertexBuffers(0, { buffer.buffer }, { 0 });
 		cmd.draw(4, 1, 0, 0);
 
 		cmd.endRenderPass();
+
+		cmd.endDebugUtilsLabelEXT();
 
 		result = cmd.end();
 		ERROR_IF(failed(result), stl::fmt("Cmd Buffer end failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("End Cmd Buffer");
@@ -335,29 +349,35 @@ int main() {
 		result = device.device.resetFences({ in_flight_fence[image_idx] });
 		ERROR_IF(failed(result), stl::fmt("Fence reset failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Reset");
 
-		vk::SubmitInfo submit_info = {
-			.waitSemaphoreCount = 1,
-			.pWaitSemaphores = &image_available_sem[frame_idx],
-			.pWaitDstStageMask = &wait_stage,
-			.commandBufferCount = 1,
-			.pCommandBuffers = &cmd,
-			.signalSemaphoreCount = 1,
-			.pSignalSemaphores = &render_finished_sem[frame_idx],
-		};
-		result = device.queues.graphics.submit({ submit_info }, in_flight_fence[image_idx]);
-		ERROR_IF(failed(result), stl::fmt("Submission failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Submit");
+		{
+			OPTICK_EVENT("Submit");
+			vk::SubmitInfo submit_info = {
+				.waitSemaphoreCount = 1,
+				.pWaitSemaphores = &image_available_sem[frame_idx],
+				.pWaitDstStageMask = &wait_stage,
+				.commandBufferCount = 1,
+				.pCommandBuffers = &cmd,
+				.signalSemaphoreCount = 1,
+				.pSignalSemaphores = &render_finished_sem[frame_idx],
+			};
+			result = device.queues.graphics.submit({ submit_info }, in_flight_fence[image_idx]);
+			ERROR_IF(failed(result), stl::fmt("Submission failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Submit");
+		}
 
-		result = device.queues.present.presentKHR({
-			.waitSemaphoreCount = 1,
-			.pWaitSemaphores = &render_finished_sem[frame_idx],
-			.swapchainCount = 1,
-			.pSwapchains = &swapchain.swapchain,
-			.pImageIndices = &image_idx,
-		});
-		INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()));
-		INFO_IF(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
-		ELSE_IF_ERROR(failed(result), stl::fmt("Present failed with %s", to_cstring(result))) THEN_CRASH(result)
-		ELSE_VERBOSE("Present");
+		{
+			OPTICK_EVENT("Present");
+			result = device.queues.present.presentKHR({
+				.waitSemaphoreCount = 1,
+				.pWaitSemaphores = &render_finished_sem[frame_idx],
+				.swapchainCount = 1,
+				.pSwapchains = &swapchain.swapchain,
+				.pImageIndices = &image_idx,
+				});
+			INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()))
+			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
+			ELSE_IF_ERROR(failed(result), stl::fmt("Present failed with %s", to_cstring(result))) THEN_CRASH(result)
+			ELSE_VERBOSE("Present");
+		}
 
 		frame_idx = (frame_idx + 1) % swapchain.image_count;
 	}
@@ -371,7 +391,7 @@ int main() {
 		device.device.destroyFence(in_flight_fence[i]);
 	}
 
-	device.allocator.destroyBuffer(buffer.first, buffer.second);
+	device.allocator.destroyBuffer(buffer.buffer, buffer.allocation);
 
 	device.device.destroyCommandPool(command_pool);
 	device.device.destroyPipeline(pipeline);

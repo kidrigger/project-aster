@@ -66,7 +66,7 @@ namespace eastl {
 #endif
 	}
 
-	void* allocator::allocate(size_t n, int flags) {
+	void* allocator::allocate(size_t n, int /* flags */) {
 		// Using aligned version of malloc to be able to use _aligned_free everywhere.
 		// Apparently, EASTL doesn't distinguish aligned versus unaligned memory, this means we must use _aligned_malloc / _aligned_free everywhere or it will prolly crash in runtime.
 		constexpr size_t defaultAlignment = alignof(void*);
@@ -74,7 +74,7 @@ namespace eastl {
 		return _aligned_malloc(n, defaultAlignment);
 	}
 
-	void* allocator::allocate(size_t n, size_t alignment, size_t offset, int flags) {
+	void* allocator::allocate(size_t n, size_t alignment, size_t offset, int /* flags */) {
 		return  _aligned_offset_malloc(n, alignment, offset);
 	}
 

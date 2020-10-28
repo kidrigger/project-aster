@@ -16,3 +16,9 @@
 #define EASTL_INLINE_NAMESPACES_ENABLED 1
 #define EASTL_USER_DEFINED_ALLOCATOR
 #define EASTL_EASTDC_VSNPRINTF 0
+
+#if defined(NDEBUG)
+#define USE_OPTICK (0)
+#else
+#define USE_OPTICK (1)
+#endif

@@ -93,7 +93,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ExceptionHandling>false</ExceptionHandling>
       <WarningLevel>Level4</WarningLevel>
@@ -108,7 +108,7 @@
     <FxCompile>
       <ShaderModel>6.3</ShaderModel>
       <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
-      <ObjectFileOutput>$(OutDir)%(Filename).spv</ObjectFileOutput>
+      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -118,7 +118,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <ExceptionHandling>false</ExceptionHandling>
       <WarningLevel>Level4</WarningLevel>
@@ -135,7 +135,7 @@
     <FxCompile>
       <ShaderModel>6.3</ShaderModel>
       <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
-      <ObjectFileOutput>$(OutDir)%(Filename).spv</ObjectFileOutput>
+      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -143,7 +143,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <WarningLevel>Level4</WarningLevel>
     </ClCompile>
@@ -154,7 +154,7 @@
       <AdditionalDependencies>vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
-      <ObjectFileOutput>$(OutDir)%(Filename).spv</ObjectFileOutput>
+      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
       <ShaderModel>6.3</ShaderModel>
       <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
     </FxCompile>
@@ -166,7 +166,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <WarningLevel>Level4</WarningLevel>
     </ClCompile>
@@ -179,7 +179,7 @@
       <AdditionalDependencies>vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <FxCompile>
-      <ObjectFileOutput>$(OutDir)%(Filename).spv</ObjectFileOutput>
+      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
       <ShaderModel>6.3</ShaderModel>
       <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
     </FxCompile>
@@ -192,6 +192,15 @@
     <ClCompile Include="source.cc" />
     <ClCompile Include="core\swapchain.cc" />
     <ClCompile Include="core\window.cc" />
+    <ClCompile Include="thirdparty\optick\optick_capi.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_core.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_gpu.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_gpu.d3d12.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_gpu.vulkan.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_message.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_miniz.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_serialization.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_server.cpp" />
     <ClCompile Include="util\files.cc" />
   </ItemGroup>
   <ItemGroup>
@@ -204,18 +213,38 @@
     <ClInclude Include="core\glfw_context.h" />
     <ClInclude Include="core\swapchain.h" />
     <ClInclude Include="core\window.h" />
+    <ClInclude Include="thirdparty\optick\optick.config.h" />
+    <ClInclude Include="thirdparty\optick\optick.h" />
+    <ClInclude Include="thirdparty\optick\optick_capi.h" />
+    <ClInclude Include="thirdparty\optick\optick_common.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.freebsd.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.linux.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.macos.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.platform.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.win.h" />
+    <ClInclude Include="thirdparty\optick\optick_gpu.h" />
+    <ClInclude Include="thirdparty\optick\optick_memory.h" />
+    <ClInclude Include="thirdparty\optick\optick_message.h" />
+    <ClInclude Include="thirdparty\optick\optick_miniz.h" />
+    <ClInclude Include="thirdparty\optick\optick_serialization.h" />
+    <ClInclude Include="thirdparty\optick\optick_server.h" />
     <ClInclude Include="util\files.h" />
-    <ClInclude Include="vma\vk_mem_alloc.h" />
-    <ClInclude Include="vma\vk_mem_alloc.hpp" />
+    <ClInclude Include="thirdparty\vma\vk_mem_alloc.h" />
+    <ClInclude Include="thirdparty\vma\vk_mem_alloc.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="res\shader.fs.hlsl">
+    <FxCompile Include="res\shaders\shader.fs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
+      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
     </FxCompile>
-    <FxCompile Include="res\shader.vs.hlsl">
+    <FxCompile Include="res\shaders\shader.vs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>

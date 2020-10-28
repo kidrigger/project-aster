@@ -77,7 +77,7 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 
 	u32 i_ = 0;
 	for (auto& image_ : images) {
-		_device->set_object_name(image_, stl::fmt("%s_image_%u", name.data(), i_++));
+		_device->set_object_name(image_, stl::fmt("%s Image %u", name.data(), i_++));
 	}
 
 	i_ = 0;
@@ -100,7 +100,7 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 
 	i_ = 0;
 	for (auto& image_ : images) {
-		_device->set_object_name(image_, stl::fmt("%s_view_%u", name.data(), i_++));
+		_device->set_object_name(image_, stl::fmt("%s View %u", name.data(), i_++));
 	}
 
 	INFO(stl::fmt("Number of swapchain images in %s %d", name.data(), image_count));
@@ -176,7 +176,7 @@ void Swapchain::recreate() noexcept {
 
 	u32 i_ = 0;
 	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, stl::fmt("%s_image_%u", name.data(), i_++));
+		parent_device->set_object_name(image_, stl::fmt("%s Image %u", name.data(), i_++));
 	}
 
 	// TODO: See if this needs to be / can be async
@@ -201,13 +201,13 @@ void Swapchain::recreate() noexcept {
 				.baseArrayLayer = 0,
 				.layerCount = 1,
 			},
-			});
+		});
 		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
 	}
 
 	i_ = 0;
 	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, stl::fmt("%s_view_%u", name.data(), i_++));
+		parent_device->set_object_name(image_, stl::fmt("%s View %u", name.data(), i_++));
 	}
 
 	INFO(stl::fmt("Number of swapchain images in %s %d", name.data(), image_count));

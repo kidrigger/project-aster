@@ -164,8 +164,8 @@ i32 Device::device_score(const Context* _context, const Window* _window, vk::Phy
 void Device::set_name(const stl::string& _name) noexcept {
 	VERBOSE(stl::fmt("Device %s -> %s", name.data(), _name.data()));
 	name = _name;
-	set_object_name(physical_device, stl::fmt("GPU %s", _name.data()));
-	set_object_name(device, stl::fmt("Device %s", _name.data()));
+	set_object_name(physical_device, stl::fmt("%s GPU", _name.data()));
+	set_object_name(device, stl::fmt("%s Device", _name.data()));
 }
 
 QueueFamilyIndices Device::get_queue_families(const Window* _window, vk::PhysicalDevice _device) noexcept {

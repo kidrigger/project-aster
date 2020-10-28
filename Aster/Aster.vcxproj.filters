@@ -16,23 +16,48 @@
     <ClCompile Include="core\device.cc" />
     <ClCompile Include="core\swapchain.cc" />
     <ClCompile Include="core\window.cc" />
+    <ClCompile Include="thirdparty\optick\optick_capi.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_core.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_gpu.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_gpu.d3d12.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_gpu.vulkan.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_message.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_miniz.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_serialization.cpp" />
+    <ClCompile Include="thirdparty\optick\optick_server.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />
     <ClInclude Include="logger.h" />
     <ClInclude Include="constants.h" />
     <ClInclude Include="config.h" />
-    <ClInclude Include="vma\vk_mem_alloc.h" />
-    <ClInclude Include="vma\vk_mem_alloc.hpp" />
     <ClInclude Include="util\files.h" />
     <ClInclude Include="core\context.h" />
     <ClInclude Include="core\device.h" />
     <ClInclude Include="core\glfw_context.h" />
     <ClInclude Include="core\swapchain.h" />
     <ClInclude Include="core\window.h" />
+    <ClInclude Include="thirdparty\vma\vk_mem_alloc.h" />
+    <ClInclude Include="thirdparty\vma\vk_mem_alloc.hpp" />
+    <ClInclude Include="thirdparty\optick\optick.config.h" />
+    <ClInclude Include="thirdparty\optick\optick.h" />
+    <ClInclude Include="thirdparty\optick\optick_capi.h" />
+    <ClInclude Include="thirdparty\optick\optick_common.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.freebsd.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.linux.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.macos.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.platform.h" />
+    <ClInclude Include="thirdparty\optick\optick_core.win.h" />
+    <ClInclude Include="thirdparty\optick\optick_gpu.h" />
+    <ClInclude Include="thirdparty\optick\optick_memory.h" />
+    <ClInclude Include="thirdparty\optick\optick_message.h" />
+    <ClInclude Include="thirdparty\optick\optick_miniz.h" />
+    <ClInclude Include="thirdparty\optick\optick_serialization.h" />
+    <ClInclude Include="thirdparty\optick\optick_server.h" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="res\shader.fs.hlsl" />
-    <FxCompile Include="res\shader.vs.hlsl" />
+    <FxCompile Include="res\shaders\shader.fs.hlsl" />
+    <FxCompile Include="res\shaders\shader.vs.hlsl" />
   </ItemGroup>
 </Project>

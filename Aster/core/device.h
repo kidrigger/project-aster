@@ -40,6 +40,12 @@ struct Queues {
 	Option<vk::Queue> compute;
 };
 
+struct Buffer {
+	vk::Buffer buffer;
+	vma::Allocation allocation;
+	stl::string name;
+};
+
 struct Device {
 
 	void init(const stl::string& name, const Context* context, const Window* window) noexcept;
@@ -56,6 +62,26 @@ struct Device {
 			.pObjectName = _name.data(),
 		});
 		WARN_IF(failed(result), "Debug Utils name setting failed with "s + to_string(result));
+	}
+
+	vk::ResultValue<Buffer> create_buffer(const stl::string& _name, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
+		auto[result, buffer] = allocator.createBuffer({
+			.size = _size,
+			.usage = _usage,
+			.sharingMode = vk::SharingMode::eExclusive,
+		}, {
+			.usage = _memory_usage,
+		});
+
+		if (!failed(result)) {
+			set_object_name(buffer.first, _name);
+		}
+
+		return vk::ResultValue<Buffer>(result, { 
+			.buffer = buffer.first, 
+			.allocation = buffer.second,
+			.name = stl::move(_name)
+		});
 	}
 
 // fields

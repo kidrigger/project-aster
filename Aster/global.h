@@ -19,6 +19,8 @@
 #include <vma/vk_mem_alloc.hpp>
 #pragma warning(pop)
 
+#include <optick/optick.h>
+
 namespace stl = eastl;
 
 inline bool failed(vk::Result result) {

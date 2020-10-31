@@ -88,14 +88,22 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 		.device = device,
 		.instance = _context->instance,
 	});
-	ERROR_IF(failed(result), "Memory allocator creation failed") THEN_CRASH(result) ELSE_INFO("Memory Allocator Created");
+	ERROR_IF(failed(result), stl::fmt("Memory allocator creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Memory Allocator Created");
 
 	set_name(name);
 
 	INFO(stl::fmt("Created Device '%s' Successfully", name.data()));
+
+	tie(result, transfer_cmd_pool) = device.createCommandPool({
+		.flags = vk::CommandPoolCreateFlagBits::eTransient,
+		.queueFamilyIndex = queue_families.transfer_idx,
+	});
+	ERROR_IF(failed(result), stl::fmt("Transfer command pool creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Command Pool Created");
+	set_object_name(transfer_cmd_pool, "Async tranfer command pool");
 }
 
 void Device::destroy() noexcept {
+	device.destroyCommandPool(transfer_cmd_pool);
 	allocator.destroy();
 	device.destroy();
 	INFO("Device '" + name + "' Destroyed");

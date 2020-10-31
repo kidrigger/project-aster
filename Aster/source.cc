@@ -43,9 +43,25 @@ int main() {
 	stl::array<vk::ShaderModule, 2> shaders;
 	vk::Pipeline pipeline;
 	vk::RenderPass renderpass;
+	vk::DescriptorSetLayout descriptor_layout;
 	stl::fixed_vector<vk::Framebuffer, 3> framebuffers;
 
-	tie(result, layout) = device.device.createPipelineLayout({});
+	vk::DescriptorSetLayoutBinding desc_set_layout_binding = {
+		.binding = 0,
+		.descriptorType = vk::DescriptorType::eUniformBuffer,
+		.descriptorCount = 1,
+		.stageFlags = vk::ShaderStageFlagBits::eVertex,
+	};
+
+	tie(result, descriptor_layout) = device.device.createDescriptorSetLayout({
+		.bindingCount = 1,
+		.pBindings = &desc_set_layout_binding,
+	});
+
+	tie(result, layout) = device.device.createPipelineLayout({
+		.setLayoutCount = 1,
+		.pSetLayouts = &descriptor_layout,
+	});
 	ERROR_IF(failed(result), stl::fmt("Layout creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Layout Created");
 
 	// Shaders
@@ -103,7 +119,7 @@ int main() {
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency,
-	});
+		});
 	ERROR_IF(failed(result), stl::fmt("Renderpass creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
 	device.set_object_name(renderpass, "Triangle Draw Pass");
 
@@ -122,7 +138,7 @@ int main() {
 				.width = swapchain.extent.width,
 				.height = swapchain.extent.height,
 				.layers = 1,
-			});
+				});
 			ERROR_IF(failed(result), stl::fmt("Framebuffer creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer Created");
 		}
 	};
@@ -213,7 +229,7 @@ int main() {
 		.pDynamicStates = dynamic_states.data(),
 	};
 
-	tie(result, pipeline) = device.device.createGraphicsPipeline({/*Cache*/}, {
+	tie(result, pipeline) = device.device.createGraphicsPipeline({/*Cache*/ }, {
 		.stageCount = cast<u32>(ssci.size()),
 		.pStages = ssci.data(),
 		.pVertexInputState = &visci,
@@ -228,62 +244,157 @@ int main() {
 	});
 	ERROR_IF(failed(result), stl::fmt("Pipeline creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Created");
 
-	vk::CommandPool command_pool;
-	tie(result, command_pool) = device.device.createCommandPool({
-		.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-		.queueFamilyIndex = device.queue_families.graphics_idx,
-	});
+	stl::vector<Vertex> vertices = {
+		{ vec4(0.0f, 0.5f, 0.0f, 1.0f), vec4(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ vec4(0.5f, -0.5f, 0.0f, 1.0f), vec4(0.0f, 1.0f, 0.0f, 1.0f) },
+		{ vec4(-0.5f, -0.5f, 0.0f, 1.0f), vec4(0.0f, 0.0f, 1.0f, 1.0f) },
+	};
+	vertices.push_back(vertices.front());
 
 	// Vertices
 	Buffer buffer;
-	tie(result, buffer) = device.create_buffer("Triangle VB", 4 * sizeof(Vertex), vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eVertexBuffer, vma::MemoryUsage::eCpuToGpu);
-	{
-		void* mapped_memory;
-		tie(result, mapped_memory) = device.allocator.mapMemory(buffer.allocation);
-		ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
-		auto vertices = cast<Vertex*>(mapped_memory);
-		vertices[0] = { vec4(0.0f, 0.5f, 0.5f, 1.0f), vec4(1.0f, 0.0f, 0.0f, 1.0f) };
-		vertices[1] = { vec4(0.5f, -0.5f, 0.5f, 1.0f), vec4(0.0f, 1.0f, 0.0f, 1.0f) };
-		vertices[2] = { vec4(-0.5f, -0.5f, 0.5f, 1.0f), vec4(0.0f, 0.0f, 1.0f, 1.0f) };
-		vertices[3] = vertices[0];
-		device.allocator.unmapMemory(buffer.allocation);
+	tie(result, buffer) = device.create_buffer("Triangle VB", 4 * sizeof(Vertex), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vma::MemoryUsage::eGpuOnly);
+	auto transfer_handle = device.upload_data(&buffer, stl::span((u8*)vertices.data(), sizeof(vertices[0]) * vertices.size()));
+
+	vk::DescriptorPoolSize pool_size = {
+		.type = vk::DescriptorType::eUniformBuffer,
+		.descriptorCount = swapchain.image_count,
 	};
 
-	stl::fixed_vector<vk::Semaphore, 3> image_available_sem;
-	stl::fixed_vector<vk::Semaphore, 3> render_finished_sem;
-	stl::fixed_vector<vk::Fence, 3> in_flight_fence;
+	vk::DescriptorPool descriptor_pool;
+	tie(result, descriptor_pool) = device.device.createDescriptorPool({
+		.maxSets = 3,
+		.poolSizeCount = 1,
+		.pPoolSizes = &pool_size,
+	});
 
-	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		tie(result, image_available_sem.push_back()) = device.device.createSemaphore({});
-		tie(result, render_finished_sem.push_back()) = device.device.createSemaphore({});
-		tie(result, in_flight_fence.push_back()) = device.device.createFence({
-			.flags = vk::FenceCreateFlagBits::eSignaled,
-		});
-	}
-
-	stl::vector<vk::CommandBuffer> command_buffers;
+	stl::vector<vk::DescriptorSet> descriptor_sets;
 	{
-		std::vector<vk::CommandBuffer> commands;
-		tie(result, commands) = device.device.allocateCommandBuffers({
-			.commandPool = command_pool,
-			.level = vk::CommandBufferLevel::ePrimary,
-			.commandBufferCount = swapchain.image_count,
+		stl::vector<vk::DescriptorSetLayout> layouts(swapchain.image_count, descriptor_layout);
+		std::vector<vk::DescriptorSet> dsets;
+		tie(result, dsets) = device.device.allocateDescriptorSets({
+			.descriptorPool = descriptor_pool,
+			.descriptorSetCount = cast<u32>(layouts.size()),
+			.pSetLayouts = layouts.data(),
 		});
-		for (auto& buf : commands) {
-			command_buffers.push_back(buf);
+		for (auto& ds : dsets) {
+			descriptor_sets.push_back(ds);
 		}
 	}
 
+	struct Frame {
+		vk::Semaphore image_available_sem;
+		vk::Semaphore render_finished_sem;
+		vk::Fence in_flight_fence;
+
+		vk::CommandPool command_pool;
+		vk::CommandBuffer command_buffer;
+
+		const Device* parent_device;
+
+		void init(Device* _device, u32 frame_index) {
+			parent_device = _device;
+			vk::Result result;
+
+			tie(result, image_available_sem) = _device->device.createSemaphore({});
+			ERROR_IF(failed(result), stl::fmt("Image available semaphore creation failed with %s", to_cstring(result))) THEN_CRASH(result);
+			_device->set_object_name(image_available_sem, stl::fmt("Frame %d Image Available Sem", frame_index));
+
+			tie(result, render_finished_sem) = _device->device.createSemaphore({});
+			ERROR_IF(failed(result), stl::fmt("Render finished semaphore creation failed with %s", to_cstring(result))) THEN_CRASH(result);
+			_device->set_object_name(render_finished_sem, stl::fmt("Frame %d Render Finished Sem", frame_index));
+
+			tie(result, in_flight_fence) = _device->device.createFence({ .flags = vk::FenceCreateFlagBits::eSignaled });
+			ERROR_IF(failed(result), stl::fmt("In flight fence creation failed with %s", to_cstring(result))) THEN_CRASH(result);
+			_device->set_object_name(render_finished_sem, stl::fmt("Frame %d In Flight Fence", frame_index));
+
+			tie(result, command_pool) = _device->device.createCommandPool({
+				.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+				.queueFamilyIndex = _device->queue_families.graphics_idx,
+			});
+			ERROR_IF(failed(result), stl::fmt("Command pool creation failed with %s", to_cstring(result))) THEN_CRASH(result);
+			_device->set_object_name(command_pool, stl::fmt("Frame %d Command Pool", frame_index));
+
+			vk::CommandBufferAllocateInfo cbai = {
+				.commandPool = command_pool,
+				.level = vk::CommandBufferLevel::ePrimary,
+				.commandBufferCount = 1,
+			};
+			result = _device->device.allocateCommandBuffers(&cbai, &command_buffer);
+			ERROR_IF(failed(result), stl::fmt("Cmd Buffer allocation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Cmd Allocated Buffer");
+		}
+
+		void destroy() {
+			parent_device->device.destroySemaphore(image_available_sem);
+			parent_device->device.destroySemaphore(render_finished_sem);
+			parent_device->device.destroyFence(in_flight_fence);
+			parent_device->device.destroyCommandPool(command_pool);
+		}
+	};
+
+	stl::fixed_vector<Frame, 3> frames(swapchain.image_count);
+	u32 i_ = 0;
+	for (auto& frame : frames) {
+		frame.init(&device, i_++);
+	}
+	stl::fixed_vector<Frame*, 3> in_flight_frames;
+	in_flight_frames.reserve(swapchain.image_count);
+	for (auto& frame : frames) {
+		in_flight_frames.push_back(&frame);
+	}
+
+	stl::fixed_vector<Buffer, 3> ubos;
+	for (u32 i = 0; i < swapchain.image_count; ++i) {
+		tie(result, ubos.push_back()) = device.create_buffer(stl::fmt("Ubo %i", i), 4 * sizeof(Vertex), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
+		{
+			void* mapped_memory;
+			tie(result, mapped_memory) = device.allocator.mapMemory(ubos.back().allocation);
+			ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
+			auto model = cast<mat4*>(mapped_memory);
+			*model = glm::mat4(1.0f);
+			device.allocator.unmapMemory(ubos.back().allocation);
+
+			vk::DescriptorBufferInfo buf_info = {
+				.buffer = ubos.back().buffer,
+				.offset = 0,
+				.range = sizeof(mat4),
+			};
+
+			vk::WriteDescriptorSet wds = {
+				.dstSet = descriptor_sets[i],
+				.dstBinding = 0,
+				.dstArrayElement = 0,
+				.descriptorCount = 1,
+				.descriptorType = vk::DescriptorType::eUniformBuffer,
+				.pBufferInfo = &buf_info,
+			};
+
+			device.device.updateDescriptorSets({ wds }, {});
+		};
+	}
+
 	u32 frame_idx = 0;
+	f64 ftime = 0;
+
+	transfer_handle.wait_for_transfer();
 	while (window.poll()) {
 
 		OPTICK_FRAME("Main frame");
 		u32 image_idx;
 
+		ftime = glfwGetTime();
+
+		Frame* current_frame = &frames[frame_idx];
+
+		{
+			OPTICK_EVENT("Frame wait");
+			result = device.device.waitForFences({ current_frame->in_flight_fence }, true, max_value<u64>);
+		}
+
 		{
 			OPTICK_EVENT("Acquire");
 
-			tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, image_available_sem[frame_idx], {});
+			tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, current_frame->image_available_sem, {});
 
 			INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()))
 			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
@@ -291,10 +402,27 @@ int main() {
 			ELSE_VERBOSE("Image Acquired");
 		}
 
-		result = device.device.waitForFences({ in_flight_fence[image_idx] }, true, max_value<u64>);
-		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
+		{
+			OPTICK_EVENT("Image wait");
+			result = device.device.waitForFences({ in_flight_frames[image_idx]->in_flight_fence }, true, max_value<u64>);
+			ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
+			in_flight_frames[image_idx] = current_frame;
+		}
 
-		auto& cmd = command_buffers[image_idx];
+		{
+			void* mapped_memory;
+			tie(result, mapped_memory) = device.allocator.mapMemory(ubos[frame_idx].allocation);
+			ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
+			auto model = cast<mat4*>(mapped_memory);
+			*model = glm::transpose(glm::rotate(glm::mat4(1.0f), cast<f32>(ftime), glm::vec3(0.0f, 1.0f, 0.0f)));
+			device.allocator.unmapMemory(ubos[frame_idx].allocation);
+		}
+
+		{
+			OPTICK_EVENT("Reset Command Pool");
+			device.device.resetCommandPool(current_frame->command_pool, {});
+		}
+		vk::CommandBuffer cmd = current_frame->command_buffer;
 
 		result = cmd.begin({
 			.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit,
@@ -334,6 +462,7 @@ int main() {
 		}, vk::SubpassContents::eInline);
 
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, { descriptor_sets[frame_idx] }, {});
 		cmd.bindVertexBuffers(0, { buffer.buffer }, { 0 });
 		cmd.draw(4, 1, 0, 0);
 
@@ -346,21 +475,21 @@ int main() {
 
 		vk::PipelineStageFlags wait_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
-		result = device.device.resetFences({ in_flight_fence[image_idx] });
+		result = device.device.resetFences({ current_frame->in_flight_fence });
 		ERROR_IF(failed(result), stl::fmt("Fence reset failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Reset");
 
 		{
 			OPTICK_EVENT("Submit");
 			vk::SubmitInfo submit_info = {
 				.waitSemaphoreCount = 1,
-				.pWaitSemaphores = &image_available_sem[frame_idx],
+				.pWaitSemaphores = &current_frame->image_available_sem,
 				.pWaitDstStageMask = &wait_stage,
 				.commandBufferCount = 1,
 				.pCommandBuffers = &cmd,
 				.signalSemaphoreCount = 1,
-				.pSignalSemaphores = &render_finished_sem[frame_idx],
+				.pSignalSemaphores = &current_frame->render_finished_sem,
 			};
-			result = device.queues.graphics.submit({ submit_info }, in_flight_fence[image_idx]);
+			result = device.queues.graphics.submit({ submit_info }, current_frame->in_flight_fence);
 			ERROR_IF(failed(result), stl::fmt("Submission failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Submit");
 		}
 
@@ -368,11 +497,11 @@ int main() {
 			OPTICK_EVENT("Present");
 			result = device.queues.present.presentKHR({
 				.waitSemaphoreCount = 1,
-				.pWaitSemaphores = &render_finished_sem[frame_idx],
+				.pWaitSemaphores = &current_frame->render_finished_sem,
 				.swapchainCount = 1,
 				.pSwapchains = &swapchain.swapchain,
 				.pImageIndices = &image_idx,
-				});
+			});
 			INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()))
 			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers())
 			ELSE_IF_ERROR(failed(result), stl::fmt("Present failed with %s", to_cstring(result))) THEN_CRASH(result)
@@ -385,20 +514,24 @@ int main() {
 	result = device.device.waitIdle();
 	ERROR_IF(failed(result), stl::fmt("Idling failed with %s", to_cstring(result)));
 
-	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		device.device.destroySemaphore(image_available_sem[i]);
-		device.device.destroySemaphore(render_finished_sem[i]);
-		device.device.destroyFence(in_flight_fence[i]);
+	for (auto& frame : frames) {
+		frame.destroy();
 	}
+
+	for (auto& buf : ubos) {
+		device.allocator.destroyBuffer(buf.buffer, buf.allocation);
+	}
+
+	device.device.destroyDescriptorPool(descriptor_pool);
 
 	device.allocator.destroyBuffer(buffer.buffer, buffer.allocation);
 
-	device.device.destroyCommandPool(command_pool);
 	device.device.destroyPipeline(pipeline);
 	for (auto& framebuffer : framebuffers) {
 		device.device.destroyFramebuffer(framebuffer);
 	}
 	device.device.destroyRenderPass(renderpass);
+	device.device.destroyDescriptorSetLayout(descriptor_layout);
 	device.device.destroyPipelineLayout(layout);
 
 	for (auto& shader : shaders) {

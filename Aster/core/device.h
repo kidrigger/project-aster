@@ -8,6 +8,8 @@
 #include <core/context.h>
 #include <core/window.h>
 
+#include <EASTL/span.h>
+
 struct QueueFamilyIndices {
 	static constexpr u32 INVALID_VALUE = 0xFFFFFFFFu;
 
@@ -43,6 +45,8 @@ struct Queues {
 struct Buffer {
 	vk::Buffer buffer;
 	vma::Allocation allocation;
+	vk::BufferUsageFlags usage;
+	usize size;
 	stl::string name;
 };
 
@@ -80,8 +84,86 @@ struct Device {
 		return vk::ResultValue<Buffer>(result, { 
 			.buffer = buffer.first, 
 			.allocation = buffer.second,
+			.usage = _usage,
+			.size = _size,
 			.name = stl::move(_name)
 		});
+	}
+
+	struct TransferHandle {
+		vk::Fence fence;
+		const Device* device;
+		Buffer staging_buffer;
+		vk::CommandBuffer cmd;
+
+		void init(Device* _device, Buffer& _staging_buffer, vk::CommandBuffer _cmd) {
+			device = _device;
+			auto [result, _fence] = device->device.createFence({});
+			ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstring(result)));
+			_device->set_object_name(_fence, stl::fmt("%s transfer fence", _staging_buffer.name.data()));
+			fence = _fence;
+			staging_buffer = _staging_buffer;
+			cmd = _cmd;
+		}
+
+		void wait_for_transfer() {
+			this->destroy();
+		}
+
+		void destroy() {
+			auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+			ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result)));
+			device->allocator.destroyBuffer(staging_buffer.buffer, staging_buffer.allocation);
+			device->device.destroyFence(fence);
+			device->device.freeCommandBuffers(device->transfer_cmd_pool, { cmd });
+		}
+	};
+
+	[[nodiscard]] TransferHandle upload_data(Buffer* _host_buffer, stl::span<u8> _data) {
+		auto [result, staging_buffer] = create_buffer("_stage " + _host_buffer->name, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuToGpu);
+		ERROR_IF(failed(result), stl::fmt("Staging buffer creation failed with %s", to_cstring(result))) THEN_CRASH(result);
+		{
+			void* mapped_memory;
+			tie(result, mapped_memory) = allocator.mapMemory(staging_buffer.allocation);
+			ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
+			memcpy(mapped_memory, _data.data(), _data.size());
+			allocator.unmapMemory(staging_buffer.allocation);
+		};
+
+		vk::CommandBuffer cmd;
+		vk::CommandBufferAllocateInfo allocate_info = {
+			.commandPool = transfer_cmd_pool,
+			.level = vk::CommandBufferLevel::ePrimary,
+			.commandBufferCount = 1,
+		};
+
+		result = device.allocateCommandBuffers(&allocate_info, &cmd);
+		set_object_name(cmd, stl::fmt("%s transfer command", _host_buffer->name.data()));
+		ERROR_IF(failed(result), stl::fmt("Transfer command pool allocation failed with %s", to_cstring(result))) THEN_CRASH(result);
+
+		vk::BufferCopy buffer_copy = {
+			.srcOffset = 0,
+			.dstOffset = 0,
+			.size = cast<u32>(_data.size())
+		};
+
+		result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
+		ERROR_IF(failed(result), stl::fmt("Command buffer begin failed with %s", to_cstring(result)));
+
+		cmd.copyBuffer(staging_buffer.buffer, _host_buffer->buffer, { buffer_copy });
+		result = cmd.end();
+		ERROR_IF(failed(result), stl::fmt("Command buffer end failed with %s", to_cstring(result)));
+
+		TransferHandle handle;
+		handle.init(this, staging_buffer, cmd);
+
+		result = queues.transfer.submit({ {
+			.commandBufferCount = 1,
+			.pCommandBuffers = &cmd,
+		} }, handle.fence);
+		ERROR_IF(failed(result), stl::fmt("Submit failed with %s", to_cstring(result))) THEN_CRASH(result);
+
+		return handle;
 	}
 
 // fields
@@ -92,6 +174,8 @@ struct Device {
 	vk::Device device;
 	Queues queues;
 	vma::Allocator allocator;
+
+	vk::CommandPool transfer_cmd_pool;
 
 	stl::string name;
 	void set_name(const stl::string& name) noexcept;

@@ -60,4 +60,7 @@
     <FxCompile Include="res\shaders\shader.fs.hlsl" />
     <FxCompile Include="res\shaders\shader.vs.hlsl" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="res\shaders\shader.hlsli" />
+  </ItemGroup>
 </Project>

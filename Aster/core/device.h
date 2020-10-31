@@ -46,6 +46,7 @@ struct Buffer {
 	vk::Buffer buffer;
 	vma::Allocation allocation;
 	vk::BufferUsageFlags usage;
+	vma::MemoryUsage memory_usage;
 	usize size;
 	stl::string name;
 };
@@ -85,8 +86,9 @@ struct Device {
 			.buffer = buffer.first, 
 			.allocation = buffer.second,
 			.usage = _usage,
+			.memory_usage = _memory_usage,
 			.size = _size,
-			.name = stl::move(_name)
+			.name = stl::move(_name),
 		});
 	}
 
@@ -119,16 +121,15 @@ struct Device {
 		}
 	};
 
-	[[nodiscard]] TransferHandle upload_data(Buffer* _host_buffer, stl::span<u8> _data) {
-		auto [result, staging_buffer] = create_buffer("_stage " + _host_buffer->name, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuToGpu);
+	[[nodiscard]] TransferHandle upload_data(Buffer* _host_buffer, const stl::span<u8>& _data)  {
+
+		ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), stl::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.data()))
+		ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, stl::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()));
+
+		auto [result, staging_buffer] = create_buffer("_stage " + _host_buffer->name, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly);
 		ERROR_IF(failed(result), stl::fmt("Staging buffer creation failed with %s", to_cstring(result))) THEN_CRASH(result);
-		{
-			void* mapped_memory;
-			tie(result, mapped_memory) = allocator.mapMemory(staging_buffer.allocation);
-			ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
-			memcpy(mapped_memory, _data.data(), _data.size());
-			allocator.unmapMemory(staging_buffer.allocation);
-		};
+		
+		update_data(&staging_buffer, _data);
 
 		vk::CommandBuffer cmd;
 		vk::CommandBufferAllocateInfo allocate_info = {
@@ -164,6 +165,17 @@ struct Device {
 		ERROR_IF(failed(result), stl::fmt("Submit failed with %s", to_cstring(result))) THEN_CRASH(result);
 
 		return handle;
+	}
+
+	void update_data(Buffer* _host_buffer, const stl::span<u8>& _data) {
+
+		ERROR_IF(_host_buffer->memory_usage != vma::MemoryUsage::eCpuToGpu &&
+			_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly, "Memory is not on CPU so mapping can't be done. Use upload_data");
+
+		auto [result, mapped_memory] = allocator.mapMemory(_host_buffer->allocation);
+		ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
+		memcpy(mapped_memory, _data.data(), _data.size());
+		allocator.unmapMemory(_host_buffer->allocation);
 	}
 
 // fields

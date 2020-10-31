@@ -206,6 +206,7 @@
   <ItemGroup>
     <ClInclude Include="config.h" />
     <ClInclude Include="constants.h" />
+    <ClInclude Include="core\camera.h" />
     <ClInclude Include="global.h" />
     <ClInclude Include="core\context.h" />
     <ClInclude Include="logger.h" />

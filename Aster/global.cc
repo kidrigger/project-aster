@@ -16,6 +16,8 @@
 // NOTE: Vulkan Dispatch Loader Storage - Should only appear once.
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
+Time g_time = Time();
+
 namespace eastl {
 	/* Copied From: https://gist.github.com/Const-me/8c106cdd968587b11de4212b6e84573a */
 	/* Credits to Const-me */

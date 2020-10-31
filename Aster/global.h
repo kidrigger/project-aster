@@ -54,3 +54,21 @@ template <typename T>
 [[nodiscard]] constexpr u64 get_vkhandle(const T& d) noexcept {
 	return reinterpret_cast<u64>(cast<T::CType>(d));
 }
+
+struct Time {
+	f64 elapsed;
+	f64 delta;
+
+	void init() {
+		elapsed = glfwGetTime();
+		delta = 1.0 / 60.0;
+	}
+
+	void update() {
+		f64 new_elapsed = glfwGetTime();
+		delta = stl::clamp(new_elapsed - elapsed, 0.0, 0.1);
+		elapsed = new_elapsed;
+	}
+};
+
+extern Time g_time;

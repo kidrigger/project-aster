@@ -55,6 +55,7 @@
     <ClInclude Include="thirdparty\optick\optick_miniz.h" />
     <ClInclude Include="thirdparty\optick\optick_serialization.h" />
     <ClInclude Include="thirdparty\optick\optick_server.h" />
+    <ClInclude Include="core\camera.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\shader.fs.hlsl" />

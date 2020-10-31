@@ -58,6 +58,10 @@ constexpr f32 operator ""_deg(f128 degrees) {
 	return glm::radians<f32>(cast<f32>(degrees));
 }
 
+constexpr f32 operator ""_deg(u64 degrees) {
+	return glm::radians<f32>(cast<f32>(degrees));
+}
+
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;

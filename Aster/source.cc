@@ -11,16 +11,13 @@
 #include <core/context.h>
 #include <core/device.h>
 #include <core/swapchain.h>
+#include <core/camera.h>
 
 #include <util/files.h>
 
 #include <EASTL/vector.h>
 #include <EASTL/fixed_vector.h>
 #include <EASTL/vector_map.h>
-
-struct ThreadContext {
-	stl::fixed_vector<vk::CommandPool, 3> command_pools;
-};
 
 int main() {
 
@@ -46,11 +43,17 @@ int main() {
 	vk::DescriptorSetLayout descriptor_layout;
 	stl::fixed_vector<vk::Framebuffer, 3> framebuffers;
 
+	Camera camera;
+	camera.init(vec3(0, 0, -1), vec3(0, 0, 1), window.extent, 0.1f, 30.0f, 70_deg);
+
+	CameraController camera_controller;
+	camera_controller.init(&window, &camera, 1.2f);
+
 	vk::DescriptorSetLayoutBinding desc_set_layout_binding = {
 		.binding = 0,
 		.descriptorType = vk::DescriptorType::eUniformBuffer,
 		.descriptorCount = 1,
-		.stageFlags = vk::ShaderStageFlagBits::eVertex,
+		.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
 	};
 
 	tie(result, descriptor_layout) = device.device.createDescriptorSetLayout({
@@ -66,20 +69,20 @@ int main() {
 
 	// Shaders
 	auto vertex_code = load_binary32_file(R"(res/shaders/shader.vs.spv)");
-	tie(result, shaders[0]) = device.device.createShaderModule(vk::ShaderModuleCreateInfo{
+	tie(result, shaders[0]) = device.device.createShaderModule({
 		.codeSize = sizeof(u32) * vertex_code.size(),
-		.pCode = vertex_code.data()
+		.pCode = vertex_code.data(),
 	});
 	ERROR_IF(failed(result), stl::fmt("Vertex shader creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Vertex Shader Created");
-	device.set_object_name(shaders[0], R"(shader.vs)");
+	device.set_object_name(shaders[0], "shader.vs");
 
 	auto pixel_code = load_binary32_file(R"(res/shaders/shader.fs.spv)");
-	tie(result, shaders[1]) = device.device.createShaderModule(vk::ShaderModuleCreateInfo{
+	tie(result, shaders[1]) = device.device.createShaderModule({
 		.codeSize = sizeof(u32) * pixel_code.size(),
-		.pCode = pixel_code.data()
+		.pCode = pixel_code.data(),
 	});
-	ERROR_IF(failed(result), stl::fmt("Fragment shader creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Frahment Shader Created");
-	device.set_object_name(shaders[1], R"(shader.fs)");
+	ERROR_IF(failed(result), stl::fmt("Fragment shader creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Fragment Shader Created");
+	device.set_object_name(shaders[1], "shader.fs");
 
 	vk::AttachmentDescription attach_desc = {
 		.format = swapchain.format,
@@ -119,7 +122,7 @@ int main() {
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency,
-		});
+	});
 	ERROR_IF(failed(result), stl::fmt("Renderpass creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
 	device.set_object_name(renderpass, "Triangle Draw Pass");
 
@@ -138,7 +141,7 @@ int main() {
 				.width = swapchain.extent.width,
 				.height = swapchain.extent.height,
 				.layers = 1,
-				});
+			});
 			ERROR_IF(failed(result), stl::fmt("Framebuffer creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer Created");
 		}
 	};
@@ -245,9 +248,9 @@ int main() {
 	ERROR_IF(failed(result), stl::fmt("Pipeline creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Created");
 
 	stl::vector<Vertex> vertices = {
-		{ vec4(0.0f, 0.5f, 0.0f, 1.0f), vec4(1.0f, 0.0f, 0.0f, 1.0f) },
-		{ vec4(0.5f, -0.5f, 0.0f, 1.0f), vec4(0.0f, 1.0f, 0.0f, 1.0f) },
-		{ vec4(-0.5f, -0.5f, 0.0f, 1.0f), vec4(0.0f, 0.0f, 1.0f, 1.0f) },
+		{ vec4(0.5 * cos(90_deg), 0.5 * sin(90_deg), 0.0f, 1.0f), vec4(1.0f, 0.0f, 0.0f, 1.0f) },
+		{ vec4(0.5 * cos(210_deg), 0.5 * sin(210_deg), 0.0f, 1.0f), vec4(0.0f, 1.0f, 0.0f, 1.0f) },
+		{ vec4(0.5 * cos(330_deg), 0.5 * sin(330_deg), 0.0f, 1.0f), vec4(0.0f, 0.0f, 1.0f, 1.0f) },
 	};
 	vertices.push_back(vertices.front());
 
@@ -345,19 +348,15 @@ int main() {
 
 	stl::fixed_vector<Buffer, 3> ubos;
 	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		tie(result, ubos.push_back()) = device.create_buffer(stl::fmt("Ubo %i", i), 4 * sizeof(Vertex), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
+		tie(result, ubos.push_back()) = device.create_buffer(stl::fmt("Camera Ubo %i", i), sizeof(Camera), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
 		{
-			void* mapped_memory;
-			tie(result, mapped_memory) = device.allocator.mapMemory(ubos.back().allocation);
-			ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
-			auto model = cast<mat4*>(mapped_memory);
-			*model = glm::mat4(1.0f);
-			device.allocator.unmapMemory(ubos.back().allocation);
+			auto model = mat4(1.0f);
+			device.update_data(&ubos.back(), stl::span<u8>((u8*)&camera, sizeof(Camera)));
 
 			vk::DescriptorBufferInfo buf_info = {
 				.buffer = ubos.back().buffer,
 				.offset = 0,
-				.range = sizeof(mat4),
+				.range = sizeof(Camera),
 			};
 
 			vk::WriteDescriptorSet wds = {
@@ -374,16 +373,15 @@ int main() {
 	}
 
 	u32 frame_idx = 0;
-	f64 ftime = 0;
 
+	g_time.init();
 	transfer_handle.wait_for_transfer();
 	while (window.poll()) {
 
 		OPTICK_FRAME("Main frame");
 		u32 image_idx;
 
-		ftime = glfwGetTime();
-
+		g_time.update();
 		Frame* current_frame = &frames[frame_idx];
 
 		{
@@ -409,13 +407,13 @@ int main() {
 			in_flight_frames[image_idx] = current_frame;
 		}
 
-		{
-			void* mapped_memory;
-			tie(result, mapped_memory) = device.allocator.mapMemory(ubos[frame_idx].allocation);
-			ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
-			auto model = cast<mat4*>(mapped_memory);
-			*model = glm::transpose(glm::rotate(glm::mat4(1.0f), cast<f32>(ftime), glm::vec3(0.0f, 1.0f, 0.0f)));
-			device.allocator.unmapMemory(ubos[frame_idx].allocation);
+		{/*
+			camera.position = vec3(cos(g_time.elapsed), 0, sin(g_time.elapsed));
+			camera.direction = -camera.position;*/
+			OPTICK_EVENT("Ubo Update");
+			camera_controller.update();
+			camera.update();
+			device.update_data(&ubos[frame_idx], stl::span<u8>((u8*)&camera, sizeof(Camera)));
 		}
 
 		{
@@ -445,7 +443,7 @@ int main() {
 			.extent = swapchain.extent,
 		} });
 
-		cmd.beginDebugUtilsLabelEXT(vk::DebugUtilsLabelEXT{
+		cmd.beginDebugUtilsLabelEXT({
 			.pLabelName = "Triangle Draw",
 			.color = std::array{0.0f, 1.0f, 0.0f, 0.0f},
 		});

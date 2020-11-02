@@ -43,15 +43,43 @@ struct CameraController {
 	Window* window;
 	Camera* camera;
 
+	b8 flip_vertical;
+	b8 flip_horizontal;
+
 	f32 speed;
+
+	f64 prev_x;
+	f64 prev_y;
+
+	f32 yaw;
+	f32 pitch;
+
+	enum class Mode {
+		eCursor,
+		eFPS,
+	};
+
+	Mode mode;
 
 	void init(Window* _window, Camera* _camera, f32 _speed) {
 		camera = _camera;
 		window = _window;
 		speed = _speed;
+
+		yaw = 0.0f;
+		pitch = 0.0f;
+
+		flip_horizontal = false;
+		flip_vertical = true;
+
+		glfwGetCursorPos(window->window, &prev_x, &prev_y);
+
+		mode = Mode::eCursor;
 	}
 
 	void update() {
+		ERROR_IF(camera == nullptr, "Camera is nullptr, using outside init-destroy");
+
 		vec3 up = vec3(0, 1, 0);
 		vec3 right = glm::cross(camera->direction, up);
 
@@ -69,5 +97,52 @@ struct CameraController {
 		if (len > 0) {
 			camera->position += move_dir * speed * cast<f32>(g_time.delta) / len;
 		}
+
+		if (glfwGetMouseButton(window->window, GLFW_MOUSE_BUTTON_2)) {
+
+			if (mode == Mode::eCursor) {
+				mode = Mode::eFPS;
+				glfwGetCursorPos(window->window, &prev_x, &prev_y);
+			}
+
+			f64 x;
+			f64 y;
+			glfwGetCursorPos(window->window, &x, &y);
+
+			constexpr f32 maxPitch = 89.0_deg;
+			constexpr f32 PI = glm::pi<f32>();
+			constexpr f32 TAU = glm::two_pi<f32>();
+
+			f64 xoffset = prev_x - x;
+			f64 yoffset = y - prev_y;
+			prev_x = x;
+			prev_y = y;
+
+			f64 sensitivity = 0.01f;
+			xoffset *= sensitivity;
+			yoffset *= sensitivity;
+
+			yaw += cast<f32>(xoffset) * (flip_horizontal ? -1.0f : 1.0f);
+			pitch += cast<f32>(yoffset) * (flip_vertical ? -1.0f : 1.0f);
+
+			pitch = stl::clamp(pitch, -maxPitch, maxPitch);
+
+			if (yaw > PI) {
+				yaw -= TAU;
+			}
+			else if (yaw <= -PI) {
+				yaw += TAU;
+			}
+
+			camera->direction = vec3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch));
+		}
+		else {
+			mode = Mode::eCursor;
+		}
+	}
+
+	void destroy() {
+		camera = nullptr;
+		window = nullptr;
 	}
 };

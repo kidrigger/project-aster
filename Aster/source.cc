@@ -28,12 +28,16 @@ int main() {
 	Window window;
 	Device device;
 	Swapchain swapchain;
+	Camera camera;
+	CameraController camera_controller;
 
 	glfw.init();
 	context.init("Aster Core", Version{ 0, 0, 1 });
 	window.init(&context, 640u, 480u, PROJECT_NAME, false);
 	device.init("Primary", &context, &window);
 	swapchain.init(window.name, &window, &device);
+	camera.init(vec3(0, 0, -1), vec3(0, 0, 1), window.extent, 0.1f, 30.0f, 70_deg);
+	camera_controller.init(&window, &camera, 1.2f);
 
 	vk::Result result;
 	vk::PipelineLayout layout;
@@ -42,12 +46,6 @@ int main() {
 	vk::RenderPass renderpass;
 	vk::DescriptorSetLayout descriptor_layout;
 	stl::fixed_vector<vk::Framebuffer, 3> framebuffers;
-
-	Camera camera;
-	camera.init(vec3(0, 0, -1), vec3(0, 0, 1), window.extent, 0.1f, 30.0f, 70_deg);
-
-	CameraController camera_controller;
-	camera_controller.init(&window, &camera, 1.2f);
 
 	vk::DescriptorSetLayoutBinding desc_set_layout_binding = {
 		.binding = 0,
@@ -432,9 +430,9 @@ int main() {
 
 		cmd.setViewport(0, {{
 			.x = 0,
-			.y = 0,
+			.y = cast<f32>(swapchain.extent.height),
 			.width = cast<f32>(swapchain.extent.width),
-			.height = cast<f32>(swapchain.extent.height),
+			.height = -cast<f32>(swapchain.extent.height),
 			.minDepth = 0.0f,
 			.maxDepth = 1.0f,
 		}});
@@ -536,6 +534,8 @@ int main() {
 		device.device.destroyShaderModule(shader);
 	}
 
+	camera_controller.destroy();
+	camera.destroy();
 	swapchain.destroy();
 	device.destroy();
 	window.destroy();

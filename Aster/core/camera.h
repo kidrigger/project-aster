@@ -16,6 +16,7 @@ struct Camera {
 	f32 far_plane;
 	vec2 screen_size;
 	f32 fov;
+	f32 pad_;
 
 	void init(const vec3& _position, const vec3& _direction, const vk::Extent2D& _extent, f32 _near_plane, f32 _far_plane, f32 _vertical_fov) {
 		position = _position;
@@ -70,7 +71,7 @@ struct CameraController {
 		pitch = 0.0f;
 
 		flip_horizontal = false;
-		flip_vertical = true;
+		flip_vertical = false;
 
 		glfwGetCursorPos(window->window, &prev_x, &prev_y);
 
@@ -81,7 +82,8 @@ struct CameraController {
 		ERROR_IF(camera == nullptr, "Camera is nullptr, using outside init-destroy");
 
 		vec3 up = vec3(0, 1, 0);
-		vec3 right = glm::cross(camera->direction, up);
+		vec3 right = glm::normalize(glm::cross(up, camera->direction));
+		up = glm::cross(camera->direction, right);
 
 		vec3 move_dir(0);
 		if (glfwGetKey(window->window, GLFW_KEY_D))
@@ -113,8 +115,8 @@ struct CameraController {
 			constexpr f32 PI = glm::pi<f32>();
 			constexpr f32 TAU = glm::two_pi<f32>();
 
-			f64 xoffset = prev_x - x;
-			f64 yoffset = y - prev_y;
+			f64 xoffset = x - prev_x;
+			f64 yoffset = prev_y - y;
 			prev_x = x;
 			prev_y = y;
 

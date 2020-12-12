@@ -11,7 +11,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <GLFW/glfw3.h>
-#include <EASTL/string.h>
+#include <string>
 
 #define VULKAN_HPP_ASSERT(expr) DEBUG_IF(!(expr), "Vulkan assert failed")
 #include <vulkan/vulkan.hpp>
@@ -22,37 +22,55 @@
 
 #include <optick/optick.h>
 
-namespace stl = eastl;
+namespace stl = std;
 
 inline bool failed(vk::Result result) {
 	return result != vk::Result::eSuccess;
 }
 
-namespace eastl {
+namespace std {
+	string internal_fmt_(const char* fmt, ...);
+
 	template <typename... Ts>
-	inline string fmt(const char* fmt, Ts&&... args) {
-		return string(string::CtorSprintf(), fmt, args...);
+	string fmt(const char* fmt, Ts&&... args) {
+		return internal_fmt_(fmt, forward<Ts>(args)...);
 	}
 }
 
-inline stl::string operator+(const std::string& c, const stl::string& other) {
-	return c.data() + other;
-}
-
-inline stl::string operator+(const stl::string& c, const std::string& other) {
-	return c + other.data();
-}
-
 inline const char* to_cstring(const vk::Result& val) {
-	return to_string(val).c_str();
+	static stl::string cp_buffer = to_string(val).c_str();
+	return cp_buffer.c_str();
+}
+
+template <typename T>
+inline const char* to_cstring(const T& val) {
+	static stl::string cstr_buffer = to_string(val).c_str();
+	return cstr_buffer.c_str();
 }
 
 // TODO: Check why inline namespaces aren't working in MSVC 19.27.29110
 using namespace stl::literals::string_literals;
+using namespace stl::literals::string_view_literals;
 
 template <typename T>
 [[nodiscard]] constexpr u64 get_vkhandle(const T& d) noexcept {
 	return reinterpret_cast<u64>(cast<T::CType>(d));
+}
+
+template <typename F>
+struct stl::hash<vk::Flags<F>> {
+	usize operator()(const vk::Flags<F>& _val) {
+		return stl::hash<u32>()(cast<u32>(_val));
+	}
+};
+
+template <typename T>
+usize hash_any(const T& _val) {
+	return stl::hash<stl::remove_cvref_t<T>>()(_val);
+}
+
+inline usize hash_combine(usize _hash0, usize _hash1) {
+	return _hash0 ^ (_hash1 + 0x9e3779b9 + (_hash0 << 6) + (_hash0 >> 2));
 }
 
 struct Time {

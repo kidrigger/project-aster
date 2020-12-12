@@ -15,9 +15,8 @@
 
 #include <util/files.h>
 
-#include <EASTL/vector.h>
-#include <EASTL/fixed_vector.h>
-#include <EASTL/vector_map.h>
+#include <vector>
+#include <map>
 
 int main() {
 
@@ -45,7 +44,7 @@ int main() {
 	vk::Pipeline pipeline;
 	vk::RenderPass renderpass;
 	vk::DescriptorSetLayout descriptor_layout;
-	stl::fixed_vector<vk::Framebuffer, 3> framebuffers;
+	stl::vector<vk::Framebuffer> framebuffers;
 
 	vk::DescriptorSetLayoutBinding desc_set_layout_binding = {
 		.binding = 0,
@@ -151,7 +150,7 @@ int main() {
 		vec4 color;
 	};
 
-	stl::fixed_vector<vk::VertexInputAttributeDescription, 2> viad = {
+	stl::vector<vk::VertexInputAttributeDescription> viad = {
 		{
 			.location = 0,
 			.binding = 0,
@@ -254,7 +253,7 @@ int main() {
 
 	// Vertices
 	Buffer buffer;
-	tie(result, buffer) = device.create_buffer("Triangle VB", 4 * sizeof(Vertex), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vma::MemoryUsage::eGpuOnly);
+	tie(result, buffer) = Buffer::create(&device, "Triangle VB", 4 * sizeof(Vertex), vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer, vma::MemoryUsage::eGpuOnly);
 	auto transfer_handle = device.upload_data(&buffer, stl::span((u8*)vertices.data(), sizeof(vertices[0]) * vertices.size()));
 
 	vk::DescriptorPoolSize pool_size = {
@@ -333,20 +332,20 @@ int main() {
 		}
 	};
 
-	stl::fixed_vector<Frame, 3> frames(swapchain.image_count);
+	stl::vector<Frame> frames(swapchain.image_count);
 	u32 i_ = 0;
 	for (auto& frame : frames) {
 		frame.init(&device, i_++);
 	}
-	stl::fixed_vector<Frame*, 3> in_flight_frames;
+	stl::vector<Frame*> in_flight_frames;
 	in_flight_frames.reserve(swapchain.image_count);
 	for (auto& frame : frames) {
 		in_flight_frames.push_back(&frame);
 	}
 
-	stl::fixed_vector<Buffer, 3> ubos;
+	stl::vector<Buffer> ubos;
 	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		tie(result, ubos.push_back()) = device.create_buffer(stl::fmt("Camera Ubo %i", i), sizeof(Camera), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
+		tie(result, ubos.emplace_back()) = Buffer::create(&device, stl::fmt("Camera Ubo %i", i), sizeof(Camera), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
 		{
 			auto model = mat4(1.0f);
 			device.update_data(&ubos.back(), stl::span<u8>((u8*)&camera, sizeof(Camera)));
@@ -373,7 +372,9 @@ int main() {
 	u32 frame_idx = 0;
 
 	g_time.init();
-	transfer_handle.wait_for_transfer();
+	result = transfer_handle.wait();
+	ERROR_IF(failed(result), stl::fmt("Transfer submit failed with %s", to_cstring(result))) THEN_CRASH(result);
+
 	while (window.poll()) {
 
 		OPTICK_FRAME("Main frame");

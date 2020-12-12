@@ -7,7 +7,6 @@
 #include <config.h>
 #include <constants.h>
 #include <string>
-#include <EASTL/string.h>
 
 struct Logger {
 	enum class LogType : u32 {
@@ -51,13 +50,8 @@ struct Logger {
 #endif // !defined(NDEBUG)
 	}
 
-    template <LogType log_t>
-    inline void log(const eastl::string& message, const char* loc, u32 line) {
-        return log<log_t>(message.data(), loc, line);
-	}
-
 	template <LogType log_t>
-	[[deprecated]] inline void log(const std::string& message, const char* loc, u32 line) {
+	inline void log(const std::string& message, const char* loc, u32 line) {
 		return log<log_t>(message.c_str(), loc, line);
 	}
 
@@ -73,13 +67,8 @@ struct Logger {
 	}
 
     template <LogType log_t>
-    inline void log_cond(const char* expr_str, const eastl::string& message, const char* loc, u32 line) {
+    inline void log_cond(const char* expr_str, const std::string& message, const char* loc, u32 line) {
         log_cond<log_t>(expr_str, message.data(), loc, line);
-	}
-
-	template <LogType log_t>
-	[[deprecated]] inline void log_cond(const char* expr_str, const std::string& message, const char* loc, u32 line) {
-		log_cond<log_t>(expr_str, message.c_str(), loc, line);
 	}
 };
 

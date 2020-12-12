@@ -21,35 +21,32 @@
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
-    <ProjectGuid>{f7051b8d-736f-497a-9838-f1fa76dcf3b6}</ProjectGuid>
-    <RootNamespace>Aster</RootNamespace>
+    <ProjectGuid>{32b82b41-d347-4b06-834c-ddf1fe25d10c}</ProjectGuid>
+    <RootNamespace>Volumetric</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>Aster</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
-    <EnableUnitySupport>true</EnableUnitySupport>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
-    <EnableUnitySupport>true</EnableUnitySupport>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
@@ -76,204 +73,135 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <LinkIncremental>false</LinkIncremental>
-  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <LinkIncremental>false</LinkIncremental>
-  </PropertyGroup>
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" />
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
-  <PropertyGroup Label="Vcpkg" Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(SolutionDir)Aster\thirdparty;$(ProjectDir);$(SolutionDir)Aster;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <ExceptionHandling>false</ExceptionHandling>
-      <WarningLevel>Level4</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <FunctionLevelLinking>false</FunctionLevelLinking>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;</AdditionalLibraryDirectories>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
     </Link>
-    <FxCompile />
     <FxCompile>
       <ShaderModel>6.3</ShaderModel>
-      <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
+      <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
-      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <WarningLevel>Level4</WarningLevel>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(SolutionDir)Aster\thirdparty;$(ProjectDir);$(SolutionDir)Aster;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <ExceptionHandling>false</ExceptionHandling>
-      <WarningLevel>Level4</WarningLevel>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;</AdditionalLibraryDirectories>
     </Link>
-    <FxCompile />
     <FxCompile>
       <ShaderModel>6.3</ShaderModel>
-      <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
       <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
+      <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(SolutionDir)Aster\thirdparty;$(ProjectDir);$(SolutionDir)Aster;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <WarningLevel>Level4</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
-      <FunctionLevelLinking>false</FunctionLevelLinking>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;</AdditionalLibraryDirectories>
+      <OptimizeReferences>false</OptimizeReferences>
+      <EnableCOMDATFolding>false</EnableCOMDATFolding>
     </Link>
     <FxCompile>
-      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
       <ShaderModel>6.3</ShaderModel>
+      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
       <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <FunctionLevelLinking>false</FunctionLevelLinking>
+      <WarningLevel>Level4</WarningLevel>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(ProjectDir)\thirdparty;$(ProjectDir);$(VULKAN_SDK)\Include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(SolutionDir)Aster\thirdparty;$(ProjectDir);$(SolutionDir)Aster;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <WarningLevel>Level4</WarningLevel>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(VULKAN_SDK)/Lib;</AdditionalLibraryDirectories>
     </Link>
     <FxCompile>
-      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
       <ShaderModel>6.3</ShaderModel>
+      <ObjectFileOutput>$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
       <AdditionalOptions>-spirv %(AdditionalOptions)</AdditionalOptions>
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="core\gui.cc" />
-    <ClCompile Include="core\pipeline.cc" />
-    <ClCompile Include="global.cc" />
-    <ClCompile Include="logger.cc" />
-    <ClCompile Include="core\context.cc" />
-    <ClCompile Include="core\device.cc" />
-    <ClCompile Include="source.cc" />
-    <ClCompile Include="core\swapchain.cc" />
-    <ClCompile Include="core\window.cc" />
-    <ClCompile Include="thirdparty\imgui\imgui.cpp" />
-    <ClCompile Include="thirdparty\imgui\imgui_demo.cpp" />
-    <ClCompile Include="thirdparty\imgui\imgui_draw.cpp" />
-    <ClCompile Include="thirdparty\imgui\imgui_impl_glfw.cpp" />
-    <ClCompile Include="thirdparty\imgui\imgui_impl_vulkan.cpp" />
-    <ClCompile Include="thirdparty\imgui\imgui_widgets.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_capi.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_core.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_gpu.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_gpu.d3d12.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_gpu.vulkan.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_message.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_miniz.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_serialization.cpp" />
-    <ClCompile Include="thirdparty\optick\optick_server.cpp" />
-    <ClCompile Include="thirdparty\renderdoc\renderdoc.cpp" />
-    <ClCompile Include="thirdparty\spirv_reflect\spirv_reflect.c" />
-    <ClCompile Include="util\files.cc" />
+    <ClCompile Include="main.cc" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="config.h" />
-    <ClInclude Include="constants.h" />
-    <ClInclude Include="core\camera.h" />
-    <ClInclude Include="core\gui.h" />
-    <ClInclude Include="core\pipeline.h" />
-    <ClInclude Include="global.h" />
-    <ClInclude Include="core\context.h" />
-    <ClInclude Include="logger.h" />
-    <ClInclude Include="core\device.h" />
-    <ClInclude Include="core\glfw_context.h" />
-    <ClInclude Include="core\swapchain.h" />
-    <ClInclude Include="core\window.h" />
-    <ClInclude Include="thirdparty\imgui\imconfig.h" />
-    <ClInclude Include="thirdparty\imgui\imgui.h" />
-    <ClInclude Include="thirdparty\imgui\imgui_impl_glfw.h" />
-    <ClInclude Include="thirdparty\imgui\imgui_impl_vulkan.h" />
-    <ClInclude Include="thirdparty\imgui\imgui_internal.h" />
-    <ClInclude Include="thirdparty\imgui\imstb_rectpack.h" />
-    <ClInclude Include="thirdparty\imgui\imstb_textedit.h" />
-    <ClInclude Include="thirdparty\imgui\imstb_truetype.h" />
-    <ClInclude Include="thirdparty\optick\optick.config.h" />
-    <ClInclude Include="thirdparty\optick\optick.h" />
-    <ClInclude Include="thirdparty\optick\optick_capi.h" />
-    <ClInclude Include="thirdparty\optick\optick_common.h" />
-    <ClInclude Include="thirdparty\optick\optick_core.freebsd.h" />
-    <ClInclude Include="thirdparty\optick\optick_core.h" />
-    <ClInclude Include="thirdparty\optick\optick_core.linux.h" />
-    <ClInclude Include="thirdparty\optick\optick_core.macos.h" />
-    <ClInclude Include="thirdparty\optick\optick_core.platform.h" />
-    <ClInclude Include="thirdparty\optick\optick_core.win.h" />
-    <ClInclude Include="thirdparty\optick\optick_gpu.h" />
-    <ClInclude Include="thirdparty\optick\optick_memory.h" />
-    <ClInclude Include="thirdparty\optick\optick_message.h" />
-    <ClInclude Include="thirdparty\optick\optick_miniz.h" />
-    <ClInclude Include="thirdparty\optick\optick_serialization.h" />
-    <ClInclude Include="thirdparty\optick\optick_server.h" />
-    <ClInclude Include="thirdparty\renderdoc\renderdoc.h" />
-    <ClInclude Include="thirdparty\renderdoc\renderdoc_api.h" />
-    <ClInclude Include="thirdparty\spirv_reflect\spirv_reflect.h" />
-    <ClInclude Include="util\files.h" />
-    <ClInclude Include="thirdparty\vma\vk_mem_alloc.h" />
-    <ClInclude Include="thirdparty\vma\vk_mem_alloc.hpp" />
+    <ProjectReference Include="..\Aster\Aster.vcxproj">
+      <Project>{f7051b8d-736f-497a-9838-f1fa76dcf3b6}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="res\shaders\shader.fs.hlsl">
+    <FxCompile Include="res\shaders\hillaire.fs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
-      <ObjectFileOutput Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)%(RelativeDir)%(Filename).spv</ObjectFileOutput>
     </FxCompile>
-    <FxCompile Include="res\shaders\shader.vs.hlsl">
+    <FxCompile Include="res\shaders\hillaire.vs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Vertex</ShaderType>
+    </FxCompile>
+    <FxCompile Include="res\shaders\transmittance_lut.fs.hlsl">
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
+      <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Pixel</ShaderType>
+    </FxCompile>
+    <FxCompile Include="res\shaders\transmittance_lut.vs.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Vertex</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Vertex</ShaderType>
@@ -281,12 +209,11 @@
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="res\shaders\shader.hlsli" />
+    <None Include="res\shaders\functions.hlsli" />
+    <None Include="res\shaders\hillaire.hlsli" />
+    <None Include="res\shaders\structs.hlsli" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-  <PropertyGroup Condition="'$(Language)'=='C++'">
-    <CAExcludePath>"$(ProjectDir)\vma\";$(CAExcludePath)</CAExcludePath>
-  </PropertyGroup>
 </Project>

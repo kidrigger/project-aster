@@ -25,6 +25,16 @@
     <ClCompile Include="thirdparty\optick\optick_miniz.cpp" />
     <ClCompile Include="thirdparty\optick\optick_serialization.cpp" />
     <ClCompile Include="thirdparty\optick\optick_server.cpp" />
+    <ClCompile Include="thirdparty\renderdoc\renderdoc.cpp" />
+    <ClCompile Include="core\gui.cc" />
+    <ClCompile Include="thirdparty\imgui\imgui.cpp" />
+    <ClCompile Include="thirdparty\imgui\imgui_demo.cpp" />
+    <ClCompile Include="thirdparty\imgui\imgui_draw.cpp" />
+    <ClCompile Include="thirdparty\imgui\imgui_impl_glfw.cpp" />
+    <ClCompile Include="thirdparty\imgui\imgui_impl_vulkan.cpp" />
+    <ClCompile Include="thirdparty\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="core\pipeline.cc" />
+    <ClCompile Include="thirdparty\spirv_reflect\spirv_reflect.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />
@@ -56,6 +66,19 @@
     <ClInclude Include="thirdparty\optick\optick_serialization.h" />
     <ClInclude Include="thirdparty\optick\optick_server.h" />
     <ClInclude Include="core\camera.h" />
+    <ClInclude Include="thirdparty\renderdoc\renderdoc.h" />
+    <ClInclude Include="thirdparty\renderdoc\renderdoc_api.h" />
+    <ClInclude Include="core\gui.h" />
+    <ClInclude Include="thirdparty\imgui\imconfig.h" />
+    <ClInclude Include="thirdparty\imgui\imgui.h" />
+    <ClInclude Include="thirdparty\imgui\imgui_impl_glfw.h" />
+    <ClInclude Include="thirdparty\imgui\imgui_impl_vulkan.h" />
+    <ClInclude Include="thirdparty\imgui\imgui_internal.h" />
+    <ClInclude Include="thirdparty\imgui\imstb_rectpack.h" />
+    <ClInclude Include="thirdparty\imgui\imstb_textedit.h" />
+    <ClInclude Include="thirdparty\imgui\imstb_truetype.h" />
+    <ClInclude Include="core\pipeline.h" />
+    <ClInclude Include="thirdparty\spirv_reflect\spirv_reflect.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\shader.fs.hlsl" />

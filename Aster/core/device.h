@@ -8,7 +8,10 @@
 #include <core/context.h>
 #include <core/window.h>
 
-#include <EASTL/span.h>
+#include <span>
+#include <string_view>
+
+struct Device;
 
 struct QueueFamilyIndices {
 	static constexpr u32 INVALID_VALUE = 0xFFFFFFFFu;
@@ -43,24 +46,53 @@ struct Queues {
 };
 
 struct Buffer {
+	Device* parent_device;
 	vk::Buffer buffer;
 	vma::Allocation allocation;
 	vk::BufferUsageFlags usage;
-	vma::MemoryUsage memory_usage;
-	usize size;
+	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
+	usize size = 0;
 	stl::string name;
+
+	static vk::ResultValue<Buffer> create(Device* _device, const stl::string& _name, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
+
+	void destroy();
 };
+
+struct Image {
+	Device* parent_device;
+	vk::Image image;
+	vma::Allocation allocation;
+	vk::ImageUsageFlags usage;
+	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
+	usize size = 0;
+	stl::string name;
+
+	vk::ImageType type;
+	vk::Format format;
+	vk::Extent3D extent;
+	u32 layer_count;
+	u32 mip_count;
+
+	static vk::ResultValue<Image> create(Device* _device, const stl::string& _name, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
+
+	void destroy();
+};
+
+struct Buffer;
+template <typename T>
+struct SubmitTask;
 
 struct Device {
 
-	void init(const stl::string& name, const Context* context, const Window* window) noexcept;
+	void init(const stl::string& name, Context* context, Window* window) noexcept;
 	void destroy() noexcept;
 
 	i32 device_score(const Context* context, const Window* window, vk::PhysicalDevice device) noexcept;
 	QueueFamilyIndices get_queue_families(const Window* window, vk::PhysicalDevice device) noexcept;
 
 	template <typename T>
-	void set_object_name(const T& _obj, const stl::string& _name) const {
+	void set_object_name(const T& _obj, const stl::string_view& _name) const {
 		auto result = device.setDebugUtilsObjectNameEXT({
 			.objectType = _obj.objectType,
 			.objectHandle = get_vkhandle(_obj),
@@ -69,116 +101,22 @@ struct Device {
 		WARN_IF(failed(result), "Debug Utils name setting failed with "s + to_string(result));
 	}
 
-	vk::ResultValue<Buffer> create_buffer(const stl::string& _name, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
-		auto[result, buffer] = allocator.createBuffer({
-			.size = _size,
-			.usage = _usage,
-			.sharingMode = vk::SharingMode::eExclusive,
-		}, {
-			.usage = _memory_usage,
-		});
-
-		if (!failed(result)) {
-			set_object_name(buffer.first, _name);
-		}
-
-		return vk::ResultValue<Buffer>(result, { 
-			.buffer = buffer.first, 
-			.allocation = buffer.second,
-			.usage = _usage,
-			.memory_usage = _memory_usage,
-			.size = _size,
-			.name = stl::move(_name),
-		});
-	}
-
-	struct TransferHandle {
-		vk::Fence fence;
-		const Device* device;
-		Buffer staging_buffer;
+	vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) {
 		vk::CommandBuffer cmd;
-
-		void init(Device* _device, Buffer& _staging_buffer, vk::CommandBuffer _cmd) {
-			device = _device;
-			auto [result, _fence] = device->device.createFence({});
-			ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstring(result)));
-			_device->set_object_name(_fence, stl::fmt("%s transfer fence", _staging_buffer.name.data()));
-			fence = _fence;
-			staging_buffer = _staging_buffer;
-			cmd = _cmd;
-		}
-
-		void wait_for_transfer() {
-			this->destroy();
-		}
-
-		void destroy() {
-			auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
-			ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result)));
-			device->allocator.destroyBuffer(staging_buffer.buffer, staging_buffer.allocation);
-			device->device.destroyFence(fence);
-			device->device.freeCommandBuffers(device->transfer_cmd_pool, { cmd });
-		}
-	};
-
-	[[nodiscard]] TransferHandle upload_data(Buffer* _host_buffer, const stl::span<u8>& _data)  {
-
-		ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), stl::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.data()))
-		ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, stl::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()));
-
-		auto [result, staging_buffer] = create_buffer("_stage " + _host_buffer->name, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly);
-		ERROR_IF(failed(result), stl::fmt("Staging buffer creation failed with %s", to_cstring(result))) THEN_CRASH(result);
-		
-		update_data(&staging_buffer, _data);
-
-		vk::CommandBuffer cmd;
-		vk::CommandBufferAllocateInfo allocate_info = {
-			.commandPool = transfer_cmd_pool,
+		vk::CommandBufferAllocateInfo cbai = {
+			.commandPool = _pool,
 			.level = vk::CommandBufferLevel::ePrimary,
 			.commandBufferCount = 1,
 		};
-
-		result = device.allocateCommandBuffers(&allocate_info, &cmd);
-		set_object_name(cmd, stl::fmt("%s transfer command", _host_buffer->name.data()));
-		ERROR_IF(failed(result), stl::fmt("Transfer command pool allocation failed with %s", to_cstring(result))) THEN_CRASH(result);
-
-		vk::BufferCopy buffer_copy = {
-			.srcOffset = 0,
-			.dstOffset = 0,
-			.size = cast<u32>(_data.size())
-		};
-
-		result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
-		ERROR_IF(failed(result), stl::fmt("Command buffer begin failed with %s", to_cstring(result)));
-
-		cmd.copyBuffer(staging_buffer.buffer, _host_buffer->buffer, { buffer_copy });
-		result = cmd.end();
-		ERROR_IF(failed(result), stl::fmt("Command buffer end failed with %s", to_cstring(result)));
-
-		TransferHandle handle;
-		handle.init(this, staging_buffer, cmd);
-
-		result = queues.transfer.submit({ {
-			.commandBufferCount = 1,
-			.pCommandBuffers = &cmd,
-		} }, handle.fence);
-		ERROR_IF(failed(result), stl::fmt("Submit failed with %s", to_cstring(result))) THEN_CRASH(result);
-
-		return handle;
+		auto result = device.allocateCommandBuffers(&cbai, &cmd);
+		return vk::ResultValue<vk::CommandBuffer>(result, cmd);
 	}
 
-	void update_data(Buffer* _host_buffer, const stl::span<u8>& _data) {
-
-		ERROR_IF(_host_buffer->memory_usage != vma::MemoryUsage::eCpuToGpu &&
-			_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly, "Memory is not on CPU so mapping can't be done. Use upload_data");
-
-		auto [result, mapped_memory] = allocator.mapMemory(_host_buffer->allocation);
-		ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
-		memcpy(mapped_memory, _data.data(), _data.size());
-		allocator.unmapMemory(_host_buffer->allocation);
-	}
+	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const stl::span<u8>& _data);
+	void update_data(Buffer* _host_buffer, const stl::span<u8>& _data);
 
 // fields
+	Context* parent_context;
 	vk::PhysicalDevice physical_device;
 	vk::PhysicalDeviceProperties physical_device_properties;
 	vk::PhysicalDeviceFeatures physical_device_features;
@@ -188,7 +126,93 @@ struct Device {
 	vma::Allocator allocator;
 
 	vk::CommandPool transfer_cmd_pool;
+	vk::CommandPool graphics_cmd_pool;
 
 	stl::string name;
 	void set_name(const stl::string& name) noexcept;
+};
+
+template <typename T>
+struct SubmitTask {
+	vk::Fence fence;
+	const Device* device;
+	T payload;
+	stl::vector<vk::CommandBuffer> cmd;
+	vk::CommandPool pool;
+
+	vk::Result submit(Device* _device, T& _payload, vk::Queue _queue, vk::CommandPool _pool, stl::vector<vk::CommandBuffer> _cmd, stl::vector<vk::Semaphore> _wait_on = {}, stl::vector<vk::Semaphore> _signal_to = {}) {
+		device = _device;
+		auto [result, _fence] = device->device.createFence({});
+		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstring(result)));
+		fence = _fence;
+		payload = _payload;
+		cmd = _cmd;
+		pool = _pool;
+
+		return _queue.submit({
+			{
+				.waitSemaphoreCount = cast<u32>(_wait_on.size()),
+				.pWaitSemaphores = _wait_on.data(),
+				.commandBufferCount = cast<u32>(_cmd.size()),
+				.pCommandBuffers = _cmd.data(),
+				.signalSemaphoreCount = cast<u32>(_signal_to.size()),
+				.pSignalSemaphores = _signal_to.data(),
+			}
+		},
+		_fence);
+	}
+
+	[[nodiscard]] vk::Result  wait() {
+		return this->destroy();
+	}
+
+	[[nodiscard]] vk::Result  destroy() {
+		auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result)));
+		payload.destroy();
+		device->device.destroyFence(fence);
+		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
+		return result;
+	}
+};
+
+
+template <>
+struct SubmitTask<void> {
+	vk::Fence fence;
+	const Device* device;
+	stl::vector<vk::CommandBuffer> cmd;
+	vk::CommandPool pool;
+
+	[[nodiscard]] vk::Result submit(Device* _device, vk::Queue _queue, vk::CommandPool _pool, stl::vector<vk::CommandBuffer> _cmd, stl::vector<vk::Semaphore> _wait_on = {},
+		vk::PipelineStageFlags _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, stl::vector<vk::Semaphore> _signal_to = {}) {
+		device = _device;
+		auto [result, _fence] = device->device.createFence({});
+		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstring(result)));
+		fence = _fence;
+		cmd = _cmd;
+		pool = _pool;
+		return _queue.submit({ vk::SubmitInfo{
+			.waitSemaphoreCount = cast<u32>(_wait_on.size()),
+			.pWaitSemaphores = _wait_on.data(),
+			.pWaitDstStageMask = &_wait_stage,
+			.commandBufferCount = cast<u32>(_cmd.size()),
+			.pCommandBuffers = _cmd.data(),
+			.signalSemaphoreCount = cast<u32>(_signal_to.size()),
+			.pSignalSemaphores = _signal_to.data(),
+		} },
+		_fence);
+	}
+
+	[[nodiscard]] vk::Result wait() {
+		return this->destroy();
+	}
+
+	[[nodiscard]] vk::Result destroy() {
+		auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result)));
+		device->device.destroyFence(fence);
+		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
+		return result;
+	}
 };

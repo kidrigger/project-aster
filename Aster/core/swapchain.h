@@ -6,10 +6,10 @@
 
 #include <global.h>
 #include <core/context.h>
-#include <EASTL/fixed_vector.h>
-
 #include <core/device.h>
 #include <core/window.h>
+
+#include <vector>
 
 struct SurfaceSupportDetails
 {
@@ -31,8 +31,8 @@ struct SurfaceSupportDetails
 };
 
 struct Swapchain {
-	const Window* parent_window;
-	const Device* parent_device;
+	Window* parent_window;
+	Device* parent_device;
 
 	vk::SwapchainKHR swapchain;
 	SurfaceSupportDetails support;

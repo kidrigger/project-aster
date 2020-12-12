@@ -7,10 +7,10 @@
 Logger g_logger = Logger();
 
 /* Credits to Const-me */
-namespace eastl {
-	void __cdecl AssertionFailure(const char* af)
-	{
-		ERROR(af);
-		__debugbreak();
-	}
-}
+//namespace eastl {
+//	void __cdecl AssertionFailure(const char* af)
+//	{
+//		ERROR(af);
+//		__debugbreak();
+//	}
+//}

@@ -5,10 +5,8 @@
 #pragma once
 
 #include <global.h>
-#include <EASTL/array.h>
-#include <EASTL/fixed_vector.h>
-#include <EASTL/vector_set.h>
-#include <EASTL/vector_map.h>
+#include <array>
+#include <vector>
 
 /**
  * @class Context
@@ -20,11 +18,11 @@
  */
 struct Context final {
 
-	stl::fixed_vector<const char*, 1> validation_layers = {
+	stl::vector<const char*> validation_layers = {
 		"VK_LAYER_KHRONOS_validation",
 	};
 
-	stl::fixed_vector<const char*, 2> device_extensions = {
+	stl::vector<const char*> device_extensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 		VK_KHR_MULTIVIEW_EXTENSION_NAME,
 	};

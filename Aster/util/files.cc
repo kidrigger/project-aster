@@ -3,7 +3,7 @@
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 #include "files.h"
-#include <EASTL/vector.h>
+#include <vector>
 #include <fstream>
 
 b8 file_exists(const stl::string_view& _name) noexcept {
@@ -12,7 +12,7 @@ b8 file_exists(const stl::string_view& _name) noexcept {
 }
 
 stl::vector<u32> load_binary32_file(const stl::string_view& _name) noexcept {
-	ERROR_IF(!file_exists(_name), stl::fmt("File \"%s\" does not exist", _name.data()));
+	ERROR_IF(!file_exists(_name), stl::fmt("File '%s' does not exist", _name.data()));
 
 	stl::vector<u32> filedata;
 	std::ifstream file(_name.data(), std::ios::ate | std::ios::binary);

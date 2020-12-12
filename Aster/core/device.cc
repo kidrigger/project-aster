@@ -6,11 +6,14 @@
 
 #include <core/context.h>
 #include <core/window.h>
-#include <EASTL/vector.h>
-#include <EASTL/vector_set.h>
 
-void Device::init(const stl::string& _name, const Context* _context, const Window* _window) noexcept {
+#include <vector>
+#include <map>
+#include <set>
+
+void Device::init(const stl::string& _name, Context* _context, Window* _window) noexcept {
 	name = _name;
+	parent_context = _context;
 
 	vk::Result result;
 
@@ -20,27 +23,27 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 		tie(result, available_physical_devices) = _context->instance.enumeratePhysicalDevices();
 		ERROR_IF(failed(result), "Failed fetching devices with "s + to_string(result)) THEN_CRASH(result) ELSE_IF_ERROR(available_physical_devices.empty(), "No valid devices found") THEN_CRASH(Error::eNoDevices);
 
-		stl::vector_map<i32, vk::PhysicalDevice> device_suitability_scores;
+		stl::map<i32, vk::PhysicalDevice> device_suitability_scores;
 		for (auto& i_device : available_physical_devices) {
 			device_suitability_scores[device_score(_context, _window, i_device)] = i_device;
 		}
-		ERROR_IF(device_suitability_scores.back().first <= 0, "No suitable device found") THEN_CRASH(Error::eNoDevices);
-		physical_device = device_suitability_scores.back().second;
+		ERROR_IF(device_suitability_scores.rbegin()->first <= 0, "No suitable device found") THEN_CRASH(Error::eNoDevices);
+		physical_device = device_suitability_scores.rbegin()->second;
 		physical_device_properties = physical_device.getProperties();
 		queue_families = get_queue_families(_window, physical_device);
 		physical_device_features = physical_device.getFeatures();
-		INFO("Using " + physical_device_properties.deviceName);
+		INFO(stl::fmt("Using %s", physical_device_properties.deviceName.data()));
 	}
 
 	// Logical Device
-	stl::vector_map<u32, u32> unique_queue_families;
+	stl::map<u32, u16> unique_queue_families;
 	unique_queue_families[queue_families.graphics_idx]++;
 	unique_queue_families[queue_families.present_idx]++;
 	unique_queue_families[queue_families.transfer_idx]++;
 	unique_queue_families[queue_families.compute_idx]++;
 
 	stl::array<f32, 4> queue_priority = { 1.0f, 1.0f, 1.0f, 1.0f };
-	stl::fixed_vector<vk::DeviceQueueCreateInfo, 4> queue_create_infos;
+	stl::vector<vk::DeviceQueueCreateInfo> queue_create_infos;
 	for (auto [index_, count_] : unique_queue_families) {
 		queue_create_infos.push_back({
 			.queueFamilyIndex = index_,
@@ -88,7 +91,7 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 		.device = device,
 		.instance = _context->instance,
 	});
-	ERROR_IF(failed(result), stl::fmt("Memory allocator creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Memory Allocator Created");
+	ERROR_IF(failed(result), stl::fmt("Memory allocator creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Memory Allocator Created");
 
 	set_name(name);
 
@@ -98,11 +101,19 @@ void Device::init(const stl::string& _name, const Context* _context, const Windo
 		.flags = vk::CommandPoolCreateFlagBits::eTransient,
 		.queueFamilyIndex = queue_families.transfer_idx,
 	});
-	ERROR_IF(failed(result), stl::fmt("Transfer command pool creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Command Pool Created");
+	ERROR_IF(failed(result), stl::fmt("Transfer command pool creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Transfer Command Pool Created");
 	set_object_name(transfer_cmd_pool, "Async tranfer command pool");
+
+	tie(result, graphics_cmd_pool) = device.createCommandPool({
+		.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+		.queueFamilyIndex = queue_families.graphics_idx,
+	});
+	ERROR_IF(failed(result), stl::fmt("Graphics command pool creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Graphics Command Pool Created");
+	set_object_name(graphics_cmd_pool, "Single use Graphics command pool");
 }
 
 void Device::destroy() noexcept {
+	device.destroyCommandPool(graphics_cmd_pool);
 	device.destroyCommandPool(transfer_cmd_pool);
 	allocator.destroy();
 	device.destroy();
@@ -132,10 +143,10 @@ i32 Device::device_score(const Context* _context, const Window* _window, vk::Phy
 	auto [result, extension_properties] = _device.enumerateDeviceExtensionProperties();
 	stl::vector<stl::string> exts(extension_properties.size());
 	stl::transform(extension_properties.begin(), extension_properties.end(), exts.begin(), [](vk::ExtensionProperties& ext) { return cast<const char*>(ext.extensionName); });
-	stl::vector_set<stl::string> extension_set(exts.begin(), exts.end());
+	stl::set<stl::string> extension_set(exts.begin(), exts.end());
 
 	for (const auto& extension : _context->device_extensions) {
-		if (extension_set.find(extension) == nullptr) {
+		if (extension_set.find(extension) == extension_set.end()) {
 			return -1;
 		}
 	}
@@ -167,6 +178,55 @@ i32 Device::device_score(const Context* _context, const Window* _window, vk::Phy
 	DEBUG(stl::fmt("%s Score: %d", properties.deviceName.data(), score));
 
 	return score;
+}
+
+SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const stl::span<u8>& _data) {
+	ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), stl::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.data()))
+		ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, stl::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()));
+
+	auto [result, staging_buffer] = Buffer::create(this, "_stage " + _host_buffer->name, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly);
+	ERROR_IF(failed(result), stl::fmt("Staging buffer creation failed with %s", to_cstring(result))) THEN_CRASH(result);
+
+	update_data(&staging_buffer, _data);
+
+	vk::CommandBuffer cmd;
+	vk::CommandBufferAllocateInfo allocate_info = {
+		.commandPool = transfer_cmd_pool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1,
+	};
+
+	result = device.allocateCommandBuffers(&allocate_info, &cmd);
+	set_object_name(cmd, stl::fmt("%s transfer command", _host_buffer->name.data()));
+	ERROR_IF(failed(result), stl::fmt("Transfer command pool allocation failed with %s", to_cstring(result))) THEN_CRASH(result);
+
+	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
+	ERROR_IF(failed(result), stl::fmt("Command buffer begin failed with %s", to_cstring(result)));
+
+	cmd.copyBuffer(staging_buffer.buffer, _host_buffer->buffer, { {
+		.srcOffset = 0,
+		.dstOffset = 0,
+		.size = cast<u32>(_data.size())
+	} });
+	result = cmd.end();
+	ERROR_IF(failed(result), stl::fmt("Command buffer end failed with %s", to_cstring(result)));
+
+	SubmitTask<Buffer> handle;
+	result = handle.submit(this, staging_buffer, queues.transfer, transfer_cmd_pool, { cmd });
+	ERROR_IF(failed(result), stl::fmt("Submit failed with %s", to_cstring(result))) THEN_CRASH(result);
+
+	return handle;
+}
+
+void Device::update_data(Buffer* _host_buffer, const stl::span<u8>& _data) {
+
+	ERROR_IF(_host_buffer->memory_usage != vma::MemoryUsage::eCpuToGpu &&
+		_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly, "Memory is not on CPU so mapping can't be done. Use upload_data");
+
+	auto [result, mapped_memory] = allocator.mapMemory(_host_buffer->allocation);
+	ERROR_IF(failed(result), stl::fmt("Memory mapping failed with %s", to_cstring(result))) THEN_CRASH(result);
+	memcpy(mapped_memory, _data.data(), _data.size());
+	allocator.unmapMemory(_host_buffer->allocation);
 }
 
 void Device::set_name(const stl::string& _name) noexcept {
@@ -232,4 +292,72 @@ QueueFamilyIndices Device::get_queue_families(const Window* _window, vk::Physica
 	}
 
 	return indices;
+}
+
+vk::ResultValue<Buffer> Buffer::create(Device* _device, const stl::string& _name, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
+	auto [result, buffer] = _device->allocator.createBuffer({
+		.size = _size,
+		.usage = _usage,
+		.sharingMode = vk::SharingMode::eExclusive,
+		}, {
+			.usage = _memory_usage,
+		});
+
+	if (!failed(result)) {
+		_device->set_object_name(buffer.first, _name);
+	}
+
+	return vk::ResultValue<Buffer>(result, {
+		.parent_device = _device,
+		.buffer = buffer.first,
+		.allocation = buffer.second,
+		.usage = _usage,
+		.memory_usage = _memory_usage,
+		.size = _size,
+		.name = stl::move(_name),
+		});
+}
+
+void Buffer::destroy() {
+	parent_device->allocator.destroyBuffer(buffer, allocation);
+}
+
+vk::ResultValue<Image> Image::create(Device* _device, const stl::string& _name, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count, vma::MemoryUsage _memory_usage, u32 _layer_count) {
+
+	auto [result, image] = _device->allocator.createImage({
+		.imageType = _image_type,
+		.format = _format,
+		.extent = _extent,
+		.mipLevels = _mip_count,
+		.arrayLayers = _layer_count,
+		.samples = vk::SampleCountFlagBits::e1,
+		.tiling = vk::ImageTiling::eOptimal,
+		.usage = _usage,
+		.sharingMode = vk::SharingMode::eExclusive,
+		.initialLayout = vk::ImageLayout::eUndefined,
+	}, {
+		.usage = _memory_usage,
+	});
+
+	if (!failed(result)) {
+		_device->set_object_name(image.first, _name);
+	}
+
+	return vk::ResultValue<Image>(result, {
+		.parent_device = _device,
+		.image = image.first,
+		.allocation = image.second,
+		.usage = _usage,
+		.memory_usage = _memory_usage,
+		.name = stl::move(_name),
+		.type = _image_type,
+		.format = _format,
+		.extent = _extent,
+		.layer_count = _layer_count,
+		.mip_count = _mip_count,
+	});
+}
+
+void Image::destroy() {
+	parent_device->allocator.destroyImage(image, allocation);
 }

@@ -54,6 +54,9 @@ using Option = std::optional<T>;
 template <typename type_t, typename from_t>
 inline constexpr auto cast(from_t&& _in) { return static_cast<type_t>(forward<from_t>(_in)); }
 
+template <typename type_t, typename from_t>
+inline constexpr auto recast(from_t&& _in) { return reinterpret_cast<type_t>(forward<from_t>(_in)); }
+
 constexpr f32 operator ""_deg(f128 degrees) {
 	return glm::radians<f32>(cast<f32>(degrees));
 }
@@ -62,6 +65,9 @@ constexpr f32 operator ""_deg(u64 degrees) {
 	return glm::radians<f32>(cast<f32>(degrees));
 }
 
+using glm::ivec2;
+using glm::ivec3;
+using glm::ivec4;
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;

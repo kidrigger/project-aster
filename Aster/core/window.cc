@@ -34,10 +34,6 @@ void Window::init(const Context* _context, u32 _width, u32 _height, const stl::s
 	}
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
-	glfwSetWindowUserPointer(window, this);
-
-	glfwSetWindowSizeCallback(window, window_resize_callback);
-
 	VkSurfaceKHR surface_;
 	vk::Result result = cast<vk::Result>(glfwCreateWindowSurface(cast<VkInstance>(_context->instance), window, nullptr, &surface_));
 	ERROR_IF(failed(result), "Failed to create Surface with "s + to_string(result)) THEN_CRASH(result) ELSE_INFO("Surface Created");
@@ -55,23 +51,4 @@ void Window::destroy() noexcept {
 	monitor = nullptr;
 
 	INFO("Window '" + name + "' Destroyed");
-}
-
-void Window::window_resize_callback(GLFWwindow* _window, i32 _width, i32 _height) noexcept {
-	Window* window = cast<Window*>(glfwGetWindowUserPointer(_window));
-
-	window->extent = vk::Extent2D{ .width = cast<u32>(_width), .height = cast<u32>(_height) };
-
-	for (ResizeCallbackFn& callback_fn : window->resize_callbacks) {
-		callback_fn(window->extent);
-	}
-}
-
-Window::CallbackHandle Window::add_resize_callback(ResizeCallbackFn&& fn) {
-	resize_callbacks.push_front(stl::move(fn));
-	return resize_callbacks.cbegin();
-}
-
-void Window::remove_resize_callback(CallbackHandle& handle) {
-	resize_callbacks.erase(handle);
 }

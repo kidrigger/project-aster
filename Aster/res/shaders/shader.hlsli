@@ -10,7 +10,8 @@ struct CameraUbo {
 	float    near_plane;
 	float3   direction;
 	float    far_plane;
-	float    fov;
+	float2   screen_size;
+	float	 fov;
 };
 
 cbuffer camera : register(b0, space0) { CameraUbo camera; }

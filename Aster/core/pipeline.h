@@ -113,12 +113,12 @@ struct InterfaceVariableInfo {
     u32 location;
     vk::Format format;
 
-    b8 operator!=(const InterfaceVariableInfo& other) const {
-        return this->name != other.name || this->location != other.location || this->format != other.format;
+    b8 operator!=(const InterfaceVariableInfo& _other) const {
+        return this->name != _other.name || this->location != _other.location || this->format != _other.format;
     }
 
-    b8 operator==(const InterfaceVariableInfo& other) const {
-        return !(*this != other);
+    b8 operator==(const InterfaceVariableInfo& _other) const {
+        return !(*this != _other);
     }
 };
 
@@ -139,45 +139,9 @@ struct DescriptorInfo {
 namespace std {
     template <>
     struct hash<DescriptorInfo> {
-        usize operator()(const DescriptorInfo& _val) {
-            usize hash_ = hash_any(_val.type);
-            hash_ = hash_combine(hash_, hash_any(_val.set));
-            hash_ = hash_combine(hash_, hash_any(_val.binding));
-            hash_ = hash_combine(hash_, hash_any(_val.array_length));
-            hash_ = hash_combine(hash_, hash_any(_val.stages));
-            hash_ = hash_combine(hash_, hash_any(_val.block_size));
-            return hash_;
-        }
+	    usize operator()(const DescriptorInfo& _val) noexcept;
     };
 }
-
-struct DescriptorSetInfo [[deprecated]] {
-    u32 set;
-    stl::vector<DescriptorInfo> descriptors;
-
-    b8 operator!=(const DescriptorSetInfo& _other) const {
-        if (this->set != _other.set) {
-            return false;
-        }
-        auto this_it = this->descriptors.begin();
-        auto other_it = _other.descriptors.begin();
-        auto this_e = this->descriptors.end();
-        auto other_e = _other.descriptors.end();
-
-        while (this_it != this_e || other_it != other_e) {
-            if (this_it->binding < other_it->binding) {
-                ++this_it;
-            } else if (this_it->binding > other_it->binding) {
-                ++other_it;
-            } else {
-                if (*this_it != *other_it) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-};
 
 struct ShaderInfo {
     stl::string name;
@@ -191,18 +155,7 @@ struct ShaderInfo {
 namespace std {
     template <>
     struct hash<ShaderInfo> {
-        usize operator()(const ShaderInfo& _val) {
-            usize hash_ = 0;
-            for (auto& ds_ : _val.descriptors) {
-                hash_ = hash_combine(hash_, hash_any(ds_));
-            }
-            for (auto& pcr_ : _val.push_ranges) {
-                hash_ = hash_combine(hash_, hash_any(pcr_.size));
-                hash_ = hash_combine(hash_, hash_any(pcr_.offset));
-                hash_ = hash_combine(hash_, hash_any(pcr_.stageFlags));
-            }
-            return hash_;
-        }
+	    usize operator()(const ShaderInfo& _val) noexcept;
     };
 }
 
@@ -213,9 +166,18 @@ struct Shader {
     usize layout_hash;
 };
 
+struct RenderPass {
+    vk::RenderPass renderpass;
+    stl::string name;
+    usize attachment_format;
+    PipelineFactory* parent_factory;
+
+    void destroy();
+};
+
 struct PipelineCreateInfo {
 
-    vk::RenderPass renderpass;
+    RenderPass renderpass;
 
     struct InputAttribute {
         stl::string_view attr_name;
@@ -271,7 +233,7 @@ struct PipelineCreateInfo {
 
 template <>
 struct std::hash<PipelineCreateInfo> {
-    usize operator()(const PipelineCreateInfo& value);
+    usize operator()(const PipelineCreateInfo& _value) noexcept;
 };
 
 struct Layout {
@@ -302,22 +264,31 @@ struct PipelineFactory {
     }
 
     void destroy() {
+        for (auto& [k, v] : pipeline_map) {
+            destroy_pipeline(&v.second);
+        }
+        for (auto& [k, v] : layout_map) {
+            WARN(stl::fmt("Pipeline layout %s not released by pipeline!", v.second.layout_info.name.c_str()));
+            destroy_pipeline_layout(&v.second);
+        }
         for (auto& [k, v] : shader_map) {
+            WARN(stl::fmt("Shader Module %s not released by pipeline!", v.second.info.name.c_str()));
             destroy_shader_module(&v.second);
         }
     }
 
-    vk::ResultValue<Shader*> create_shader_module(const stl::string_view& name);
-    void destroy_shader_module(Shader* shader);
+    vk::ResultValue<Shader*> create_shader_module(const stl::string_view& _name);
+    vk::ResultValue<stl::vector<Shader*>> create_shaders(const stl::vector<stl::string_view>& _names);
+    void destroy_shader_module(Shader* _shader);
 
-    vk::ResultValue<stl::vector<Shader*>> create_shaders(const stl::vector<stl::string_view>& names);
+    vk::ResultValue<RenderPass> create_renderpass(const stl::string& _name, const vk::RenderPassCreateInfo& _create_info);
 
     vk::ResultValue<stl::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
-    vk::ResultValue<Layout*> create_pipeline_layout(const stl::vector<Shader*>& shader_infos);
-    void destroy_pipeline_layout(Layout* layout);
+    vk::ResultValue<Layout*> create_pipeline_layout(const stl::vector<Shader*>& _shader_infos);
+    void destroy_pipeline_layout(Layout* _layout);
 
-    vk::ResultValue<Pipeline*> create_pipeline(const PipelineCreateInfo& create_info);
-    void destroy_pipeline(Pipeline* pipeline);
+    vk::ResultValue<Pipeline*> create_pipeline(const PipelineCreateInfo& _create_info);
+    void destroy_pipeline(Pipeline* _pipeline);
 
     // Fields
     stl::unordered_map<usize, stl::pair<u32, Shader>> shader_map;

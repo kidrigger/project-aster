@@ -229,14 +229,14 @@ void Device::update_data(Buffer* _host_buffer, const stl::span<u8>& _data) {
 	allocator.unmapMemory(_host_buffer->allocation);
 }
 
-void Device::set_name(const stl::string& _name) noexcept {
+void Device::set_name(const stl::string& _name) {
 	VERBOSE(stl::fmt("Device %s -> %s", name.data(), _name.data()));
 	name = _name;
 	set_object_name(physical_device, stl::fmt("%s GPU", _name.data()));
 	set_object_name(device, stl::fmt("%s Device", _name.data()));
 }
 
-QueueFamilyIndices Device::get_queue_families(const Window* _window, vk::PhysicalDevice _device) noexcept {
+QueueFamilyIndices Device::get_queue_families(const Window* _window, vk::PhysicalDevice _device) {
 	QueueFamilyIndices indices;
 
 	auto queue_families_ = _device.getQueueFamilyProperties();

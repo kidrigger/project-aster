@@ -89,7 +89,7 @@ struct Device {
 	void destroy() noexcept;
 
 	i32 device_score(const Context* context, const Window* window, vk::PhysicalDevice device) noexcept;
-	QueueFamilyIndices get_queue_families(const Window* window, vk::PhysicalDevice device) noexcept;
+	QueueFamilyIndices get_queue_families(const Window* window, vk::PhysicalDevice device);
 
 	template <typename T>
 	void set_object_name(const T& _obj, const stl::string_view& _name) const {
@@ -103,12 +103,12 @@ struct Device {
 
 	vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) {
 		vk::CommandBuffer cmd;
-		vk::CommandBufferAllocateInfo cbai = {
+		vk::CommandBufferAllocateInfo cmd_buf_alloc_info = {
 			.commandPool = _pool,
 			.level = vk::CommandBufferLevel::ePrimary,
 			.commandBufferCount = 1,
 		};
-		auto result = device.allocateCommandBuffers(&cbai, &cmd);
+		const auto result = device.allocateCommandBuffers(&cmd_buf_alloc_info, &cmd);
 		return vk::ResultValue<vk::CommandBuffer>(result, cmd);
 	}
 
@@ -129,7 +129,7 @@ struct Device {
 	vk::CommandPool graphics_cmd_pool;
 
 	stl::string name;
-	void set_name(const stl::string& name) noexcept;
+	void set_name(const stl::string& _name);
 };
 
 template <typename T>

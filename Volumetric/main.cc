@@ -44,11 +44,13 @@ struct AtmosphereInfo {
 	alignas(04) i32 view_samples;				//60
 };
 
-void calculate_transmittance_lut(Device* device, PipelineFactory* _pipeline_factory, const AtmosphereInfo& info, Image* image);
+inline static Pipeline* lut_pipeline = nullptr;
+
+void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos, Image* _image);
 
 int main() {
 
-	g_logger.set_minimum_logging_level(Logger::LogType::eVerbose);
+	g_logger.set_minimum_logging_level(Logger::LogType::eDebug);
 
 	GLFWContext glfw;
 	Context context;
@@ -74,7 +76,7 @@ int main() {
 
 	vk::Result result;
 	Pipeline* pipeline;
-	vk::RenderPass renderpass;
+	RenderPass renderpass;
 	stl::vector<vk::Framebuffer> framebuffers;
 
 	vk::AttachmentDescription attach_desc = {
@@ -108,7 +110,7 @@ int main() {
 	};
 
 	// Renderpass
-	tie(result, renderpass) = device.device.createRenderPass({
+	tie(result, renderpass) = pipeline_factory.create_renderpass("Triangle Draw Pass", {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
@@ -117,7 +119,6 @@ int main() {
 		.pDependencies = &dependency,
 	});
 	ERROR_IF(failed(result), stl::fmt("Renderpass creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
-	device.set_object_name(renderpass, "Triangle Draw Pass");
 
 	auto recreate_framebuffers_impl = [&renderpass, &device, &framebuffers, &swapchain]() {
 		vk::Result result;
@@ -128,7 +129,7 @@ int main() {
 
 		for (u32 i = 0; i < swapchain.image_count; ++i) {
 			tie(result, framebuffers[i]) = device.device.createFramebuffer({
-				.renderPass = renderpass,
+				.renderPass = renderpass.renderpass,
 				.attachmentCount = 1,
 				.pAttachments = &swapchain.image_views[i],
 				.width = swapchain.extent.width,
@@ -151,6 +152,7 @@ int main() {
 		},
 		.shader_files = { R"(res/shaders/hillaire.vs.spv)", R"(res/shaders/hillaire.fs.spv)" },
 		.dynamic_states = { vk::DynamicState::eViewport, vk::DynamicState::eScissor },
+		.name = "Main Pipeline"
 	});
 	ERROR_IF(failed(result), stl::fmt("Pipeline creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Created");
 
@@ -169,13 +171,13 @@ int main() {
 	stl::vector<vk::DescriptorSet> descriptor_sets;
 	{
 		stl::vector<vk::DescriptorSetLayout> layouts(swapchain.image_count, pipeline->layout->descriptor_set_layouts.front());
-		std::vector<vk::DescriptorSet> dsets;
-		tie(result, dsets) = device.device.allocateDescriptorSets({
+		std::vector<vk::DescriptorSet> descriptor_sets;
+		tie(result, descriptor_sets) = device.device.allocateDescriptorSets({
 			.descriptorPool = descriptor_pool,
 			.descriptorSetCount = cast<u32>(layouts.size()),
 			.pSetLayouts = layouts.data(),
 		});
-		for (auto& ds : dsets) {
+		for (auto& ds : descriptor_sets) {
 			descriptor_sets.push_back(ds);
 		}
 	}
@@ -254,7 +256,7 @@ int main() {
 		.intensities = vec3(12.8f),
 	};
 
-	AtmosphereInfo atmos = {
+	AtmosphereInfo atmosphere_info = {
 		.scatter_coeff_rayleigh = vec3(5.802, 13.558, 33.1) * 1.0e-6f,
 		.density_factor_rayleigh = 8000.0f,
 		.absorption_coeff_ozone = vec3(0.650, 1.881, 0.085) * 1.0e-6f,
@@ -272,7 +274,7 @@ int main() {
 	tie(result, transmittance_lut) = Image::create(&device, "Transmittance LUT", vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, { 64, 256, 1 }, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
 	ERROR_IF(failed(result), stl::fmt("LUT Image could not be created with %s", to_cstring(result)));
 
-	calculate_transmittance_lut(&device, &pipeline_factory, atmos, &transmittance_lut);
+	calculate_transmittance_lut(&device, &pipeline_factory, atmosphere_info, &transmittance_lut);
 
 	vk::ImageView transmittance_view;
 	vk::Sampler transmittance_sampler;
@@ -297,7 +299,7 @@ int main() {
 	ERROR_IF(failed(result), "LUT Image Sampler could not be created");
 	device.set_object_name(transmittance_view, transmittance_lut.name + " sampler");
 
-	auto closest_multiple = [](usize _val, usize _of) {
+	auto closest_multiple = [](usize _val, usize _of) -> usize {
 		return _of * ((_val + _of - 1) / _of);
 	};
 
@@ -315,7 +317,7 @@ int main() {
 			memcpy(buf_data.data() + offset, &sun, sizeof(SunData));	// TODO Fix hardcode
 			offset += closest_multiple(sizeof(SunData), 256);
 			atmos_offset = offset;
-			memcpy(buf_data.data() + offset, &atmos, sizeof(AtmosphereInfo));	// TODO Fix hardcode
+			memcpy(buf_data.data() + offset, &atmosphere_info, sizeof(AtmosphereInfo));	// TODO Fix hardcode
 			device.update_data(&ubos.back(), stl::span<u8>(buf_data.data(), buf_data.size()));
 
 			stl::vector<vk::DescriptorBufferInfo> buf_info = {
@@ -382,24 +384,24 @@ int main() {
 		};
 	}
 
-	AtmosphereInfo atmos_ui_view = {
-		.scatter_coeff_rayleigh = atmos.scatter_coeff_rayleigh * 1.0e+6f,
-		.density_factor_rayleigh = atmos.density_factor_rayleigh / 1000.0f,
-		.absorption_coeff_ozone = atmos.absorption_coeff_ozone * 1.0e+6f,
-		.ozone_height = atmos.ozone_height / 1000.0f,
-		.ozone_width = atmos.ozone_width / 1000.0f,
-		.scatter_coeff_mei = atmos.scatter_coeff_mei * 1.0e+6f,
-		.absorption_coeff_mei = atmos.absorption_coeff_mei * 1.0e+6f,
-		.density_factor_mei = atmos.density_factor_mei / 1000.0f,
-		.assymetry_mei = atmos.assymetry_mei,
-		.depth_samples = atmos.depth_samples,
-		.view_samples = atmos.view_samples,
+	AtmosphereInfo atmosphere_ui_view = {
+		.scatter_coeff_rayleigh = atmosphere_info.scatter_coeff_rayleigh * 1.0e+6f,
+		.density_factor_rayleigh = atmosphere_info.density_factor_rayleigh / 1000.0f,
+		.absorption_coeff_ozone = atmosphere_info.absorption_coeff_ozone * 1.0e+6f,
+		.ozone_height = atmosphere_info.ozone_height / 1000.0f,
+		.ozone_width = atmosphere_info.ozone_width / 1000.0f,
+		.scatter_coeff_mei = atmosphere_info.scatter_coeff_mei * 1.0e+6f,
+		.absorption_coeff_mei = atmosphere_info.absorption_coeff_mei * 1.0e+6f,
+		.density_factor_mei = atmosphere_info.density_factor_mei / 1000.0f,
+		.assymetry_mei = atmosphere_info.assymetry_mei,
+		.depth_samples = atmosphere_info.depth_samples,
+		.view_samples = atmosphere_info.view_samples,
 	};
 
 	u32 frame_idx = 0;
 
 	f32 time_of_day = 0;
-	bool dynamic_time_of_day = false;
+	b8 dynamic_time_of_day = false;
 	f32 hrs_per_second = 0.4f;
 	g_time.init();
 	while (window.poll()) {
@@ -451,28 +453,28 @@ int main() {
 			Gui::DragFloat3("Sun Intensity", &sun.intensities[0], 0.1f, 0.0f, 128.0f);
 
 			if (Gui::CollapsingHeader("Atmosphere")) {
-				if (Gui::DragFloat("Rayleigh Density Factor", &atmos_ui_view.density_factor_rayleigh, 1.f, 0.0f, 100.0f, "%5.3f km")) {
-					atmos.density_factor_rayleigh = atmos_ui_view.density_factor_rayleigh * 1000.0f;
+				if (Gui::DragFloat("Rayleigh Density Factor", &atmosphere_ui_view.density_factor_rayleigh, 1.f, 0.0f, 100.0f, "%5.3f km")) {
+					atmosphere_info.density_factor_rayleigh = atmosphere_ui_view.density_factor_rayleigh * 1000.0f;
 				}
-				if (Gui::DragFloat("Mei Density Factor", &atmos_ui_view.density_factor_mei, 1.f, 0.0f, 100.0f, "%5.3f km")) {
-					atmos.density_factor_mei = atmos_ui_view.density_factor_mei * 1000.0f;
+				if (Gui::DragFloat("Mei Density Factor", &atmosphere_ui_view.density_factor_mei, 1.f, 0.0f, 100.0f, "%5.3f km")) {
+					atmosphere_info.density_factor_mei = atmosphere_ui_view.density_factor_mei * 1000.0f;
 				}
-				if (Gui::DragFloat("Ozone Height", &atmos_ui_view.ozone_height, 1.f, 0.0f, 100.0f, "%5.3f km")) {
-					atmos.ozone_height = atmos_ui_view.ozone_height * 1000.0f;
+				if (Gui::DragFloat("Ozone Height", &atmosphere_ui_view.ozone_height, 1.f, 0.0f, 100.0f, "%5.3f km")) {
+					atmosphere_info.ozone_height = atmosphere_ui_view.ozone_height * 1000.0f;
 				}
-				if (Gui::DragFloat("Ozone Width", &atmos_ui_view.ozone_width, 1.f, 0.0f, 100.0f, "%5.3f km")) {
-					atmos.ozone_width = atmos_ui_view.ozone_width * 1000.0f;
+				if (Gui::DragFloat("Ozone Width", &atmosphere_ui_view.ozone_width, 1.f, 0.0f, 100.0f, "%5.3f km")) {
+					atmosphere_info.ozone_width = atmosphere_ui_view.ozone_width * 1000.0f;
 				}
-				if (Gui::InputFloat3("Rayleigh Scatter", &atmos_ui_view.scatter_coeff_rayleigh[0], "%.4f e-6")) {
-					atmos.scatter_coeff_rayleigh = atmos_ui_view.scatter_coeff_rayleigh * 1.0e-6f;
+				if (Gui::InputFloat3("Rayleigh Scatter", &atmosphere_ui_view.scatter_coeff_rayleigh[0], "%.4f e-6")) {
+					atmosphere_info.scatter_coeff_rayleigh = atmosphere_ui_view.scatter_coeff_rayleigh * 1.0e-6f;
 				}
-				if (Gui::InputFloat("Mei Scatter", &atmos_ui_view.scatter_coeff_mei, 0.01f, 0.1f, "%.4f e-6")) {
-					atmos.scatter_coeff_rayleigh = atmos_ui_view.scatter_coeff_rayleigh * 1.0e-6f;
+				if (Gui::InputFloat("Mei Scatter", &atmosphere_ui_view.scatter_coeff_mei, 0.01f, 0.1f, "%.4f e-6")) {
+					atmosphere_info.scatter_coeff_rayleigh = atmosphere_ui_view.scatter_coeff_rayleigh * 1.0e-6f;
 				}
-				Gui::InputInt("Depth Samples", &atmos.depth_samples, 10, 100);
-				Gui::InputInt("View Samples", &atmos.view_samples, 1, 10);
+				Gui::InputInt("Depth Samples", &atmosphere_info.depth_samples, 10, 100);
+				Gui::InputInt("View Samples", &atmosphere_info.view_samples, 1, 10);
 				if (Gui::Button("Recalculate Transmittance")) {
-					calculate_transmittance_lut(&device, &pipeline_factory, atmos, &transmittance_lut);
+					calculate_transmittance_lut(&device, &pipeline_factory, atmosphere_info, &transmittance_lut);
 				}
 			}
 
@@ -496,7 +498,7 @@ int main() {
 			stl::vector<u8> buf_data(ubos[frame_idx].size);
 			memcpy(buf_data.data(), &camera, sizeof(Camera));
 			memcpy(buf_data.data() + closest_multiple(sizeof(Camera), 256), &sun, sizeof(SunData));	// TODO Fix hardcode
-			memcpy(buf_data.data() + closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256), &atmos, sizeof(AtmosphereInfo));	// TODO Fix hardcode
+			memcpy(buf_data.data() + closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256), &atmosphere_info, sizeof(AtmosphereInfo));	// TODO Fix hardcode
 			device.update_data(&ubos[frame_idx], stl::span<u8>(buf_data.data(), buf_data.size()));
 		}
 
@@ -531,7 +533,7 @@ int main() {
 		});
 
 		cmd.beginRenderPass({
-			.renderPass = renderpass,
+			.renderPass = renderpass.renderpass,
 			.framebuffer = framebuffers[image_idx],
 			.renderArea = {
 				.offset = {0, 0},
@@ -606,13 +608,15 @@ int main() {
 	device.device.destroyDescriptorPool(descriptor_pool);
 
 	pipeline->destroy();
-	for (auto& framebuffer : framebuffers) {
-		device.device.destroyFramebuffer(framebuffer);
+	for (auto& framebuffer_ : framebuffers) {
+		device.device.destroyFramebuffer(framebuffer_);
 	}
-	device.device.destroyRenderPass(renderpass);
+	renderpass.destroy();
 
 	device.device.destroySampler(transmittance_sampler);
 	device.device.destroyImageView(transmittance_view);
+
+	lut_pipeline->destroy();
 	transmittance_lut.destroy();
 
 	Gui::Destroy();
@@ -703,6 +707,37 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 	ERROR_IF(failed(result), stl::fmt("LUT Framebuffer creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
 	_device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
 
+	if (lut_pipeline == nullptr) {
+		tie(result, lut_pipeline) = _pipeline_factory->create_pipeline({
+			.renderpass = renderpass,
+			.viewport_state = {
+				.enable_dynamic = false,
+				.viewports = {
+					{
+						.x = 0.0f,
+						.y = 0.0f,
+						.width = cast<f32>(_image->extent.width),
+						.height = cast<f32>(_image->extent.height),
+						.minDepth = 0.0f,
+						.maxDepth = 1.0f,
+					}
+				},
+				.scissors = {
+					{
+						.offset = {0, 0},
+						.extent = {_image->extent.width, _image->extent.height},
+					}
+				}
+			},
+			.raster_state = {
+				.front_face = vk::FrontFace::eCounterClockwise,
+			},
+			.shader_files = { R"(res/shaders/transmittance_lut.vs.spv)", R"(res/shaders/transmittance_lut.fs.spv)" },
+			.name = "LUT Pipeline",
+		});
+		ERROR_IF(failed(result), stl::fmt("LUT Pipeline creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
+	}
+
 	tie(result, pipeline) = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
 		.viewport_state = {
@@ -728,8 +763,9 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 			.front_face = vk::FrontFace::eCounterClockwise,
 		},
 		.shader_files = { R"(res/shaders/transmittance_lut.vs.spv)", R"(res/shaders/transmittance_lut.fs.spv)" },
+		.name = "LUT Pipeline",
 	});
-	ERROR_IF(failed(result), stl::fmt("Pipeline creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Created");
+	ERROR_IF(failed(result), stl::fmt("LUT Pipeline creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
 
 	rdoc::start_capture();
 

@@ -1,9 +1,17 @@
-/*=========================================*/
-/*  Aster: res/shaders/hillaire.fs.hlsl    */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+/*==============================================*/
+/*  Aster: res/shaders/sky_view_lut.fs.hlsl		*/
+/*  Copyright (c) 2020 Anish Bhobe				*/
+/*==============================================*/
 
-#include "hillaire.hlsli"
+#include "sky_view_lut.hlsli"
+
+struct FSIn {
+	float2 uv : UV;
+};
+
+struct FSOut {
+	float4 color : SV_TARGET0;
+};
 
 // Transmittance
 float3 T(float3 x, float3 y) {
@@ -67,28 +75,19 @@ float3 L(float3 c, float3 v) {
 	return acc;
 }
 
-struct FSIn {
-	float4 dir : RAY_DIRECTION;
-	float2 uv : UV;
-};
-
-struct FSOut {
-	float4 light : SV_TARGET0;
-};
+float3 get_skyview(float2 longlat) {
+	float3 dir = get_skyview_dir_from_longlat(longlat);
+	float3 x = float3(0, camera.position.y + Rg, 0);
+	return L(x, dir);
+}
 
 FSOut main(FSIn input) {
-	//float3 x = float3(0, camera.position.y + Rg, 0);
-	float3 v = normalize(input.dir.xyz);
 
 	FSOut output;
 
-	//output.light = float4(L(x, v), 1.0f);
-	//output.light = output.light / (1.0f + output.light);
+	const float2 longlat = get_skyview_longlat_from_uv(input.uv);
+	output.color = float4(get_skyview(longlat), 1.0f);
+	output.color = output.color / (1.0f + output.color);
 
-	const float2 skyview_uv = get_skyview_uv_from_dir(v);
-	
-	output.light = skyview_lut.Sample(lut_sampler, skyview_uv);
-	//output.light = float4(get_skyview_dir_from_longlat(get_skyview_longlat_from_dir(v)), 1.0f);
-	
 	return output;
 }

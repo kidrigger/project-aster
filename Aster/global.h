@@ -89,4 +89,8 @@ struct Time {
 	}
 };
 
+inline usize closest_multiple(usize _val, usize _of) {
+	return _of * ((_val + _of - 1) / _of);
+};
+
 extern Time g_time;

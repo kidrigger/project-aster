@@ -300,50 +300,6 @@ vk::ResultValue<stl::vector<Shader*>> PipelineFactory::create_shaders(const stl:
 	return { vk::Result::eSuccess, shaders };
 }
 
-vk::ResultValue<RenderPass> PipelineFactory::create_renderpass(const stl::string& _name, const vk::RenderPassCreateInfo& _create_info) {
-	ERROR_IF(_create_info.subpassCount != 1, stl::fmt("Renderpass %s has more than 1 subpass. Currently unsupported"));
-
-	const auto attachments = stl::span(_create_info.pAttachments, cast<usize>(_create_info.attachmentCount));
-	const auto color_refs = stl::span(_create_info.pSubpasses->pColorAttachments, cast<usize>(_create_info.pSubpasses->colorAttachmentCount));
-	const auto preserve_refs = stl::span(_create_info.pSubpasses->pPreserveAttachments, cast<usize>(_create_info.pSubpasses->preserveAttachmentCount));
-
-	usize hash_value = 0;
-	
-	for (const auto& attachment_ : attachments) {
-		hash_value = hash_combine(hash_value, hash_any(attachment_.format));
-		hash_value = hash_combine(hash_value, hash_any(attachment_.samples));
-	}
-
-	usize color_ref_map = 0;
-	for (const auto& ref : color_refs) {
-		color_ref_map |= (cast<usize>(1) << ref.attachment);
-	}
-	hash_value = hash_combine(hash_value, hash_any(color_ref_map));
-
-	usize preserve_ref_map = 0;
-	for (const auto& ref : preserve_refs) {
-		preserve_ref_map |= (cast<usize>(1) << ref);
-	}
-	hash_value = hash_combine(hash_value, hash_any(preserve_ref_map));
-
-	if (_create_info.pSubpasses->pDepthStencilAttachment != nullptr) {
-		hash_value = hash_combine(hash_value, hash_any(_create_info.pSubpasses->pDepthStencilAttachment->attachment));
-	}
-
-	auto [result, rp] = parent_device->device.createRenderPass(_create_info);
-	if (!failed(result)) {
-		auto renderpass = RenderPass{
-			.renderpass = rp,
-			.name = _name,
-			.attachment_format = hash_value,
-			.parent_factory = this,
-		};
-		parent_device->set_object_name(renderpass.renderpass, _name);
-		return { result, renderpass };
-	}
-	return { result, {} };
-}
-
 void PipelineFactory::destroy_pipeline_layout(Layout* _layout) {
 	const auto hash_key = _layout->hash;
 	ERROR_IF(!layout_map.contains(hash_key), stl::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
@@ -467,7 +423,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 	stl::vector<DescriptorInfo> descriptors;
 	for (auto& shader_ : _shaders) {
 		for (auto& descriptor_ : shader_->info.descriptors) {
-			auto find_d = stl::lower_bound(descriptors.begin(), descriptors.end(), descriptor_, descriptor_info_lt);
+			auto find_d = stl::ranges::lower_bound(descriptors, descriptor_, descriptor_info_lt);
 			if (find_d != descriptors.end()) {
 				merge_acc_descriptor(&*find_d, descriptor_);
 			}
@@ -476,7 +432,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 			}
 		}
 	}
-	stl::sort(descriptors.begin(), descriptors.end(), descriptor_info_lt);
+	stl::ranges::sort(descriptors, descriptor_info_lt);
 
 	stl::map<stl::string, u32> descriptor_names;
 	u32 i_ = 0;
@@ -532,7 +488,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 	ERROR_IF(failed(result), stl::fmt("Pipeline layout creation for %s failed with %s", pipeline_info.name.c_str(), to_cstring(result))) THEN_CRASH(result);
 	parent_device->set_object_name(layout, pipeline_info.name);
 
-	auto& val = layout_map[layout_key] = {
+	auto& [key_, layout_] = layout_map[layout_key] = {
 		1u,
 		{
 			.hash = layout_key,
@@ -542,7 +498,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 		}
 	};
 
-	return vk::ResultValue<Layout*>(result, &val.second);
+	return vk::ResultValue<Layout*>(result, &layout_);
 }
 
 vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreateInfo& _create_info) {
@@ -564,12 +520,12 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 	ERROR_IF(failed(result), stl::fmt("Pipeline layout creation for %s failed with %s", _create_info.name.c_str(), to_cstring(result)));
 
 	stl::vector<ShaderStage> shader_stages(shaders.size());
-	stl::transform(shaders.begin(), shaders.end(), shader_stages.begin(), [](Shader* s) { return s->stage; });
+	stl::ranges::transform(shaders, shader_stages.begin(), [](Shader* _s) { return _s->stage; });
 	
 	stl::vector<vk::VertexInputAttributeDescription> input_attributes(pipeline_layout->layout_info.input_vars.size());
 	for (auto& ivs : pipeline_layout->layout_info.input_vars) {
 		auto& in_attr = _create_info.vertex_input.attributes;
-		auto match_iv = stl::find_if(in_attr.begin(), in_attr.end(), [&_name = ivs.name](auto& _ia) { return _ia.attr_name == _name; });
+		auto match_iv = stl::ranges::find_if(in_attr, [&_name = ivs.name](auto& _ia) { return _ia.attr_name == _name; });
 		ERROR_IF(match_iv == in_attr.end(), stl::fmt("Attribute %s required by shader, not found", ivs.name.c_str()))
 			ELSE_IF_ERROR(match_iv->format != ivs.format, stl::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)", ivs.name.c_str(), to_cstring(ivs.format), to_cstring(match_iv->format)));
 
@@ -655,27 +611,27 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 	ERROR_IF(failed(result), stl::fmt("Pipeline %s creation failed with %s", _create_info.name.c_str(), to_cstring(result)));
 	parent_device->set_object_name(pipeline, _create_info.name);
 
-	auto& val = pipeline_map[pipeline_key] = {
+	auto& [key_, pipeline_] = pipeline_map[pipeline_key] = {
 		1u,
 		Pipeline{
 			.shaders = move(shaders),
 			.layout = pipeline_layout,
 			.pipeline = pipeline,
-			.name = move(_create_info.name),
+			.name = _create_info.name,
 			.hash = pipeline_key,
 			.parent_factory = this,
 		}
 	};
 
-	return vk::ResultValue(result, &val.second);
+	return vk::ResultValue(result, &pipeline_);
 };
 
 usize std::hash<ShaderInfo>::operator()(const ShaderInfo& _val) noexcept {
 	usize hash_ = 0;
-	for (auto& ds_ : _val.descriptors) {
+	for (const auto& ds_ : _val.descriptors) {
 		hash_ = hash_combine(hash_, hash_any(ds_));
 	}
-	for (auto& pcr_ : _val.push_ranges) {
+	for (const auto& pcr_ : _val.push_ranges) {
 		hash_ = hash_combine(hash_, hash_any(pcr_.size));
 		hash_ = hash_combine(hash_, hash_any(pcr_.offset));
 		hash_ = hash_combine(hash_, hash_any(pcr_.stageFlags));
@@ -691,10 +647,6 @@ usize std::hash<DescriptorInfo>::operator()(const DescriptorInfo& _val) noexcept
 	hash_ = hash_combine(hash_, hash_any(_val.stages));
 	hash_ = hash_combine(hash_, hash_any(_val.block_size));
 	return hash_;
-}
-
-void RenderPass::destroy() {
-	parent_factory->parent_device->device.destroyRenderPass(renderpass);
 }
 
 usize std::hash<PipelineCreateInfo>::operator()(const PipelineCreateInfo& _value) noexcept {

@@ -192,6 +192,7 @@
   <ItemGroup>
     <ClCompile Include="core\gui.cc" />
     <ClCompile Include="core\pipeline.cc" />
+    <ClCompile Include="core\renderpass.cc" />
     <ClCompile Include="global.cc" />
     <ClCompile Include="logger.cc" />
     <ClCompile Include="core\context.cc" />
@@ -224,6 +225,7 @@
     <ClInclude Include="core\camera.h" />
     <ClInclude Include="core\gui.h" />
     <ClInclude Include="core\pipeline.h" />
+    <ClInclude Include="core\renderpass.h" />
     <ClInclude Include="global.h" />
     <ClInclude Include="core\context.h" />
     <ClInclude Include="logger.h" />

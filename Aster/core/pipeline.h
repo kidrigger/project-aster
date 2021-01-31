@@ -6,6 +6,7 @@
 
 #include <global.h>
 #include <core/device.h>
+#include <core/renderpass.h>
 
 #include <vector>
 #include <map>
@@ -166,15 +167,6 @@ struct Shader {
     usize layout_hash;
 };
 
-struct RenderPass {
-    vk::RenderPass renderpass;
-    stl::string name;
-    usize attachment_format;
-    PipelineFactory* parent_factory;
-
-    void destroy();
-};
-
 struct PipelineCreateInfo {
 
     RenderPass renderpass;
@@ -281,10 +273,8 @@ struct PipelineFactory {
     vk::ResultValue<stl::vector<Shader*>> create_shaders(const stl::vector<stl::string_view>& _names);
     void destroy_shader_module(Shader* _shader);
 
-    vk::ResultValue<RenderPass> create_renderpass(const stl::string& _name, const vk::RenderPassCreateInfo& _create_info);
-
     vk::ResultValue<stl::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
-    vk::ResultValue<Layout*> create_pipeline_layout(const stl::vector<Shader*>& _shader_infos);
+    vk::ResultValue<Layout*> create_pipeline_layout(const stl::vector<Shader*>& _shaders);
     void destroy_pipeline_layout(Layout* _layout);
 
     vk::ResultValue<Pipeline*> create_pipeline(const PipelineCreateInfo& _create_info);

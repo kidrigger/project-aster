@@ -16,14 +16,15 @@ struct GLFWContext {
 
 	inline static u32 count = 0;
 
-	void init() noexcept {
+	static void init() noexcept {
 		if (count++ > 0) return;
 		if (glfwInit() == GLFW_FALSE) {
 			CRASH(post_error());
 		}
+		return;
 	}
 
-	void destroy() noexcept {
+	static void destroy() noexcept {
 		if (--count == 0) {
 			glfwTerminate();
 		}

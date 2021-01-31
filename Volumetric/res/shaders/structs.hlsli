@@ -21,7 +21,7 @@ struct AtmosphereParams {
 	float absorption_coeff_mei;		//44
 	float density_factor_mei;		//48
 
-	float assymetry_mei;			//52
+	float asymmetry_mei;			//52
 
 	// sampling
 	int depth_samples;				//56

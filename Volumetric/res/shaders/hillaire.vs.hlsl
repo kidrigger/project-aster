@@ -12,6 +12,7 @@ struct VSIn {
 struct VSOut {
 	float4 position : SV_POSITION;
 	float4 ray_direction : RAY_DIRECTION;
+	float2 uv : UV;
 };
 
 VSOut main(VSIn input) {
@@ -35,6 +36,7 @@ VSOut main(VSIn input) {
 
 	output.position = vertices[input.idx];
 	output.ray_direction = float4(fwd + right * aspect * vertices[input.idx].x + up * vertices[input.idx].y, 0.0f);
+	output.uv = 0.5f + 0.5f * output.position.xy;
 
 	return output;
 }

@@ -24,10 +24,13 @@
     <FxCompile Include="res\shaders\hillaire.fs.hlsl" />
     <FxCompile Include="res\shaders\transmittance_lut.vs.hlsl" />
     <FxCompile Include="res\shaders\transmittance_lut.fs.hlsl" />
+    <FxCompile Include="res\shaders\sky_view_lut.vs.hlsl" />
+    <FxCompile Include="res\shaders\sky_view_lut.fs.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\shaders\functions.hlsli" />
     <None Include="res\shaders\hillaire.hlsli" />
     <None Include="res\shaders\structs.hlsli" />
+    <None Include="res\shaders\sky_view_lut.hlsli" />
   </ItemGroup>
 </Project>

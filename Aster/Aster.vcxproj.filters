@@ -35,6 +35,7 @@
     <ClCompile Include="thirdparty\imgui\imgui_widgets.cpp" />
     <ClCompile Include="core\pipeline.cc" />
     <ClCompile Include="thirdparty\spirv_reflect\spirv_reflect.c" />
+    <ClCompile Include="core\renderpass.cc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />
@@ -79,6 +80,7 @@
     <ClInclude Include="thirdparty\imgui\imstb_truetype.h" />
     <ClInclude Include="core\pipeline.h" />
     <ClInclude Include="thirdparty\spirv_reflect\spirv_reflect.h" />
+    <ClInclude Include="core\renderpass.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\shader.fs.hlsl" />

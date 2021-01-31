@@ -1,5 +1,5 @@
 /*=========================================*/
-/*  Aster: res/shaders/hillaire.hlsli      */
+/*  Aster: res/shaders/sky_view_lut.hlsli  */
 /*  Copyright (c) 2020 Anish Bhobe         */
 /*=========================================*/
 
@@ -10,6 +10,5 @@
 [[vk::binding(2, 0)]] cbuffer atmos { AtmosphereParams atmosphere; }
 [[vk::binding(3, 0)]] Texture2D transmittance_lut;
 [[vk::binding(3, 0)]] SamplerState lut_sampler;
-[[vk::binding(4, 0)]] Texture2D skyview_lut;
 
 #include "functions.hlsli"

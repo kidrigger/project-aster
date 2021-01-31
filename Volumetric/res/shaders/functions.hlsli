@@ -55,7 +55,9 @@ float3 markinf(float3 a, float3 col) {
 static const float Rg = 6360000.0f;
 static const float Ra = 6460000.0f;
 static const float PI = 3.14159265f;
+static const float TAU = 6.28318530f;
 static const float PI_INV = 0.3183098862f;
+static const float TAU_INV = 0.15915494309f;
 
 static const int TRANSMITTANCE_TEXTURE_WIDTH = 64;
 static const int TRANSMITTANCE_TEXTURE_HEIGHT = 256;
@@ -138,7 +140,7 @@ float Pr(float nu) {
 
 float Pm(float nu) {
 	float k = 3.0f * PI_INV / 8.0f;
-	float g = atmos.assymetry_mei;
+	float g = atmosphere.asymmetry_mei;
 	float g2 = g * g;
 	float factor = 1 + g2 - 2.0f * g * nu;
 	return (1 - g2) * (1 + nu * nu) / ((2 + g2) * pow(max(0.0000001f, factor), 1.5f));
@@ -146,17 +148,17 @@ float Pm(float nu) {
 
 float density_rayleigh(float r) {
 	float h = r - Rg;
-	return exp(-h / atmos.density_factor_rayleigh);
+	return exp(-h / atmosphere.density_factor_rayleigh);
 }
 
 float density_mei(float r) {
 	float h = r - Rg;
-	return exp(-h / atmos.density_factor_mei);
+	return exp(-h / atmosphere.density_factor_mei);
 }
 
 float density_ozone(float r) {
 	float h = r - Rg;
-	return max(0, 1 - abs(h - atmos.ozone_height) * 2.0f / atmos.ozone_width);
+	return max(0, 1 - abs(h - atmosphere.ozone_height) * 2.0f / atmosphere.ozone_width);
 }
 
 float get_tex_coord_from_unit_range(float x, int texture_size) {
@@ -167,7 +169,7 @@ float get_unit_range_from_tex_coord(float u, int texture_size) {
 	return (u - 0.5 / float(texture_size)) / (1.0 - 1.0 / float(texture_size));
 }
 
-float2 get_rmu_from_uv(float2 uv) {
+float2 get_transmittance_rmu_from_uv(float2 uv) {
 	float x_r = get_unit_range_from_tex_coord(uv.x, TRANSMITTANCE_TEXTURE_WIDTH);
 	float x_mu = get_unit_range_from_tex_coord(uv.y, TRANSMITTANCE_TEXTURE_HEIGHT);
 	// Distance to top atmosphere boundary for a horizontal ray at ground level.
@@ -187,18 +189,52 @@ float2 get_rmu_from_uv(float2 uv) {
 	return float2(r, mu);
 }
 
-float2 get_uv_from_rmu(float2 rmu) {
+float2 get_transmittance_uv_from_rmu(float2 rmu) {
 	// Distance to top atmosphere boundary for a horizontal ray at ground level.
-	float h = sqrt(Ra * Ra - Rg * Rg);
+	const float h = sqrt(Ra * Ra - Rg * Rg);
 	// Distance to the horizon.
-	float rho = sqrt(max(0, rmu.x * rmu.x - Rg * Rg));
-	float d = distance_to_atmosphere(rmu);
-	float d_min = Ra - rmu.x;
-	float d_max = rho + h;
-	float x_mu = (d - d_min) / (d_max - d_min);
-	float x_r = rho / h;
+	const float rho = sqrt(max(0, rmu.x * rmu.x - Rg * Rg));
+	const float d = distance_to_atmosphere(rmu);
+	const float d_min = Ra - rmu.x;
+	const float d_max = rho + h;
+	const float x_mu = (d - d_min) / (d_max - d_min);
+	const float x_r = rho / h;
 	return float2(get_tex_coord_from_unit_range(x_r, TRANSMITTANCE_TEXTURE_WIDTH),
 		get_tex_coord_from_unit_range(x_mu, TRANSMITTANCE_TEXTURE_HEIGHT));
+}
+
+float2 get_skyview_longlat_from_uv(float2 uv) {
+	
+	float longitude = TAU * uv.x;
+	const float nv = 2.0f * uv.y - 1.0f;
+	float latitude = sign(nv) * nv * nv * 0.5f * PI;
+
+	return float2(longitude, latitude);
+}
+
+float2 get_skyview_longlat_from_dir(float3 dir) {
+
+	float2 longlat;
+	longlat.y = asin(dir.y);
+	const float2 norm_dir = normalize(dir.xz);
+	longlat.x = (norm_dir.y < 0 ? 2 * PI - acos(norm_dir.x) : acos(norm_dir.x));
+
+	return longlat;
+}
+
+float3 get_skyview_dir_from_longlat(float2 longlat) {
+	return float3(cos(longlat.x) * cos(longlat.y), sin(longlat.y), sin(longlat.x) * cos(longlat.y));
+}
+
+float2 get_skyview_uv_from_longlat(float2 longlat) {
+	const float l = longlat.y;
+	float v = 0.5f + 0.5f * sign(l) * sqrt(abs(l) * 2.0f * PI_INV);
+	float u = longlat.x * TAU_INV;
+	return float2(u, v);
+}
+
+float2 get_skyview_uv_from_dir(float3 dir) {
+	return get_skyview_uv_from_longlat(get_skyview_longlat_from_dir(dir));
 }
 
 #endif // _FUNCTIONS_HLSLI

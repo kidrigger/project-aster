@@ -20,24 +20,22 @@ struct Camera {
 
 	void init(const vec3& _position, const vec3& _direction, const vk::Extent2D& _extent, f32 _near_plane, f32 _far_plane, f32 _vertical_fov) {
 		position = _position;
-		direction = glm::normalize(_direction);
+		direction = normalize(_direction);
 		screen_size = vec2(_extent.width, _extent.height);
 		near_plane = _near_plane;
 		far_plane = _far_plane;
 		fov = _vertical_fov;
 		projection = glm::perspective(fov, screen_size.x / screen_size.y, near_plane, far_plane);
-		view = glm::lookAt(position, direction + position, vec3(0, 1, 0));
+		view = lookAt(position, direction + position, vec3(0, 1, 0));
 	}
 
 	void update() {
-		direction = glm::normalize(direction);
+		direction = normalize(direction);
 		projection = glm::perspective(fov, screen_size.x / screen_size.y, near_plane, far_plane);
-		view = glm::lookAt(position, direction + position, vec3(0, 1, 0));
+		view = lookAt(position, direction + position, vec3(0, 1, 0));
 	}
 
-	void destroy() {
-
-	}
+	void destroy() { }
 };
 
 struct CameraController {
@@ -82,18 +80,14 @@ struct CameraController {
 		ERROR_IF(camera == nullptr, "Camera is nullptr, using outside init-destroy");
 
 		vec3 up = vec3(0, 1, 0);
-		vec3 right = glm::normalize(glm::cross(up, camera->direction));
-		up = glm::cross(camera->direction, right);
+		vec3 right = normalize(cross(up, camera->direction));
+		up = cross(camera->direction, right);
 
 		vec3 move_dir(0);
-		if (glfwGetKey(window->window, GLFW_KEY_D))
-			move_dir += right;
-		if (glfwGetKey(window->window, GLFW_KEY_A))
-			move_dir -= right;
-		if (glfwGetKey(window->window, GLFW_KEY_W))
-			move_dir += camera->direction;
-		if (glfwGetKey(window->window, GLFW_KEY_S))
-			move_dir -= camera->direction;
+		if (glfwGetKey(window->window, GLFW_KEY_D)) move_dir += right;
+		if (glfwGetKey(window->window, GLFW_KEY_A)) move_dir -= right;
+		if (glfwGetKey(window->window, GLFW_KEY_W)) move_dir += camera->direction;
+		if (glfwGetKey(window->window, GLFW_KEY_S)) move_dir -= camera->direction;
 
 		f32 len = length(move_dir);
 		if (len > 0) {
@@ -131,14 +125,12 @@ struct CameraController {
 
 			if (yaw > PI) {
 				yaw -= TAU;
-			}
-			else if (yaw <= -PI) {
+			} else if (yaw <= -PI) {
 				yaw += TAU;
 			}
 
 			camera->direction = vec3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch));
-		}
-		else {
+		} else {
 			mode = Mode::eCursor;
 		}
 	}

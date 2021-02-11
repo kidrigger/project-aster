@@ -16,8 +16,7 @@ stl::vector<u32> load_binary32_file(const stl::string_view& _name) noexcept {
 
 	stl::vector<u32> filedata;
 	std::ifstream file(_name.data(), std::ios::ate | std::ios::binary);
-	if (file.is_open())
-	{
+	if (file.is_open()) {
 		size_t filesize = file.tellg();
 		filedata.resize(filesize / sizeof(u32));
 		file.seekg(0);

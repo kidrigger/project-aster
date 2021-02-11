@@ -52,10 +52,14 @@ template <typename T>
 using Option = std::optional<T>;
 
 template <typename type_t, typename from_t>
-inline constexpr auto cast(from_t&& _in) { return static_cast<type_t>(forward<from_t>(_in)); }
+constexpr auto cast(from_t&& _in) {
+	return static_cast<type_t>(forward<from_t>(_in));
+}
 
 template <typename type_t, typename from_t>
-inline constexpr auto recast(from_t&& _in) { return reinterpret_cast<type_t>(forward<from_t>(_in)); }
+constexpr auto recast(from_t&& _in) {
+	return reinterpret_cast<type_t>(forward<from_t>(_in));
+}
 
 constexpr f32 operator ""_deg(f128 degrees) {
 	return glm::radians<f32>(cast<f32>(degrees));
@@ -118,4 +122,3 @@ constexpr T qnan = std::numeric_limits<T>::quiet_NaN();
 
 template <typename T>
 constexpr T snan = std::numeric_limits<T>::signalling_NaN();
-

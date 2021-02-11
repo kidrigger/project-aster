@@ -6,10 +6,10 @@
 
 #include <global.h>
 
-struct GLFWContext {
-	static inline i32 post_error() noexcept {
+struct GlfwContext {
+	static i32 post_error() noexcept {
 		static const char* error_ = nullptr;
-		i32 code = glfwGetError(&error_);
+		const auto code = glfwGetError(&error_);
 		ERROR("GLFW "s + error_);
 		return code;
 	}
@@ -21,7 +21,6 @@ struct GLFWContext {
 		if (glfwInit() == GLFW_FALSE) {
 			CRASH(post_error());
 		}
-		return;
 	}
 
 	static void destroy() noexcept {

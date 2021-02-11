@@ -6,7 +6,7 @@
 
 #include "renderpass.h"
 
-vk::ResultValue<RenderPass> RenderPass::create(Device* _device, const stl::string& _name, const vk::RenderPassCreateInfo& _create_info) {
+vk::ResultValue<RenderPass> RenderPass::create(const stl::string& _name, Device* _device, const vk::RenderPassCreateInfo& _create_info) {
 	ERROR_IF(_create_info.subpassCount != 1, stl::fmt("Renderpass %s has more than 1 subpass. Currently unsupported"));
 
 	const auto attachments = stl::span(_create_info.pAttachments, cast<usize>(_create_info.attachmentCount));

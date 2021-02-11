@@ -24,28 +24,28 @@
 
 namespace stl = std;
 
-inline bool failed(vk::Result result) {
-	return result != vk::Result::eSuccess;
+inline bool failed(vk::Result _result) {
+	return _result != vk::Result::eSuccess;
 }
 
 namespace std {
-	string internal_fmt_(const char* fmt, ...);
+	string internal_fmt_(const char* _fmt, ...);
 
 	template <typename... Ts>
-	string fmt(const char* fmt, Ts&&... args) {
-		return internal_fmt_(fmt, forward<Ts>(args)...);
+	string fmt(const char* _fmt, Ts&&... args) {
+		return internal_fmt_(_fmt, forward<Ts>(args)...);
 	}
 }
 
-inline const char* to_cstring(const vk::Result& val) {
-	static stl::string cp_buffer = to_string(val).c_str();
+inline const char* to_cstr(const vk::Result& _val) {
+	static stl::string cp_buffer = to_string(_val).c_str();
 	return cp_buffer.c_str();
 }
 
 template <typename T>
-inline const char* to_cstring(const T& val) {
-	static stl::string cstr_buffer = to_string(val).c_str();
-	return cstr_buffer.c_str();
+const char* to_cstr(const T& _val) {
+	static stl::string buffer = to_string(_val).c_str();
+	return buffer.c_str();
 }
 
 // TODO: Check why inline namespaces aren't working in MSVC 19.27.29110
@@ -53,7 +53,7 @@ using namespace stl::literals::string_literals;
 using namespace stl::literals::string_view_literals;
 
 template <typename T>
-[[nodiscard]] constexpr u64 get_vkhandle(const T& d) noexcept {
+[[nodiscard]] constexpr u64 get_vk_handle(const T& d) noexcept {
 	return reinterpret_cast<u64>(cast<T::CType>(d));
 }
 
@@ -83,7 +83,7 @@ struct Time {
 	}
 
 	void update() {
-		f64 new_elapsed = glfwGetTime();
+		const auto new_elapsed = glfwGetTime();
 		delta = stl::clamp(new_elapsed - elapsed, 0.0, 0.1);
 		elapsed = new_elapsed;
 	}

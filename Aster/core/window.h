@@ -19,24 +19,24 @@ struct Window final {
 	stl::string name;
 	b8 full_screen{ false };
 
-	void init(const Context* context, u32 width, u32 height, const stl::string& title, b8 full_screen) noexcept;
+	void init(const stl::string& _title, const Context* _context, u32 _width, u32 _height, b8 _full_screen) noexcept;
 
-	inline bool should_close() noexcept {
+	bool should_close() noexcept {
 		return glfwWindowShouldClose(window);
 	}
 
-	inline bool poll() noexcept {
+	bool poll() noexcept {
 		glfwPollEvents();
 		return !glfwWindowShouldClose(window);
 	}
 
-	inline void set_window_size(const vk::Extent2D& extent_) noexcept {
-		extent = extent_;
+	void set_window_size(const vk::Extent2D& _extent) noexcept {
+		extent = _extent;
 		glfwSetWindowSize(window, extent.width, extent.height);
 	}
 
-	inline void set_window_size(u32 width, u32 height) noexcept {
-		set_window_size({ width, height });
+	void set_window_size(u32 _width, u32 _height) noexcept {
+		set_window_size({ _width, _height });
 	}
 
 	void destroy() noexcept;

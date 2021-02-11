@@ -31,15 +31,15 @@ struct Context final {
 	void destroy() noexcept;
 
 	static VKAPI_ATTR b32 VKAPI_CALL debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-		VkDebugUtilsMessageTypeFlagsEXT message_type,
-		const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-		void* user_data);
+	                                                VkDebugUtilsMessageTypeFlagsEXT message_type,
+	                                                const VkDebugUtilsMessengerCallbackDataEXT* _callback_data,
+	                                                void* user_data);
 
-// Fields
+	// Fields
 	bool enable_validation_layers{ true };
 	bool is_complete{ false };
 
 	vk::Instance instance;
 	vk::DebugUtilsMessengerEXT debug_messenger;
-	
+
 };

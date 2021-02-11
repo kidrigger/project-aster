@@ -11,8 +11,7 @@
 
 #include <vector>
 
-struct SurfaceSupportDetails
-{
+struct SurfaceSupportDetails {
 	vk::SurfaceCapabilitiesKHR capabilities;
 	std::vector<vk::SurfaceFormatKHR> formats;
 	std::vector<vk::PresentModeKHR> present_modes;

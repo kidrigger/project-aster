@@ -4,7 +4,7 @@
 /*=========================================*/
 #include "context.h"
 
-VKAPI_ATTR b32 VKAPI_CALL Context::debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT _message_severity, VkDebugUtilsMessageTypeFlagsEXT _message_type, const VkDebugUtilsMessengerCallbackDataEXT* _callback_data, void* _user_data) {
+VKAPI_ATTR b32 VKAPI_CALL Context::debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT _message_severity, VkDebugUtilsMessageTypeFlagsEXT _message_type, const VkDebugUtilsMessengerCallbackDataEXT* _callback_data, [[maybe_unused]] void* _user_data) {
 	using Severity = vk::DebugUtilsMessageSeverityFlagsEXT;
 	using SeverityBits = vk::DebugUtilsMessageSeverityFlagBitsEXT;
 	using MessageType = vk::DebugUtilsMessageTypeFlagsEXT;
@@ -14,10 +14,14 @@ VKAPI_ATTR b32 VKAPI_CALL Context::debug_callback(VkDebugUtilsMessageSeverityFla
 	auto message_type = MessageType(_message_type);
 
 	if (message_type & MessageTypeBits::eValidation) {
-		if (severity & SeverityBits::eError) ERROR(_callback_data->pMessage);
-		if (severity & SeverityBits::eWarning) WARN(_callback_data->pMessage);
-		if (severity & SeverityBits::eInfo) INFO(_callback_data->pMessage);
-		if (severity & SeverityBits::eVerbose) VERBOSE(_callback_data->pMessage);
+		if (severity & SeverityBits::eError)
+			ERROR(_callback_data->pMessage);
+		if (severity & SeverityBits::eWarning)
+			WARN(_callback_data->pMessage);
+		if (severity & SeverityBits::eInfo)
+			INFO(_callback_data->pMessage);
+		if (severity & SeverityBits::eVerbose)
+			VERBOSE(_callback_data->pMessage);
 	}
 
 	return false;
@@ -38,14 +42,14 @@ void Context::init(const stl::string& _app_name, const Version& _app_version) no
 	};
 
 	vk::DebugUtilsMessengerCreateInfoEXT debug_messenger_create_info = {
-			.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
-								vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-								vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo,
-			.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-							vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-							vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
-			.pfnUserCallback = debug_callback,
-			.pUserData = nullptr,
+		.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError |
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+		vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo,
+		.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+		vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+		vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
+		.pfnUserCallback = debug_callback,
+		.pUserData = nullptr,
 	};
 
 	u32 glfw_extension_count = 0;

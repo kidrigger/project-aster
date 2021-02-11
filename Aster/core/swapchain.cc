@@ -30,15 +30,14 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 			present_mode = i_mode;
 			break;
 		}
-		else if (i_mode == vk::PresentModeKHR::eImmediate) {
+		if (i_mode == vk::PresentModeKHR::eImmediate) {
 			present_mode = i_mode;
 		}
 	}
 
 	if (support.capabilities.currentExtent.width != max_value<u32>) {
 		extent = support.capabilities.currentExtent;
-	}
-	else {
+	} else {
 		extent.width = stl::clamp(_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
 		extent.height = stl::clamp(_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
 	}
@@ -48,7 +47,7 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 		image_count = stl::min(image_count, support.capabilities.maxImageCount);
 	}
 
-	requires_ownership_transfer = (_device->queue_families.graphics_idx != _device->queue_families.present_idx);	// needs transfer if not the same queue
+	requires_ownership_transfer = (_device->queue_families.graphics_idx != _device->queue_families.present_idx); // needs transfer if not the same queue
 
 	vk::Result result;
 	tie(result, swapchain) = _device->device.createSwapchainKHR({
@@ -68,12 +67,12 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 		.clipped = true,
 		.oldSwapchain = vk::SwapchainKHR(),
 	});
-	ERROR_IF(failed(result), stl::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstring(result))) ELSE_INFO(stl::fmt("Swapchain '%s' created!", name.data()));
+	ERROR_IF(failed(result), stl::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstr(result))) ELSE_INFO(stl::fmt("Swapchain '%s' created!", name.data()));
 
 	_device->set_object_name(swapchain, name);
 
 	tie(result, images) = _device->device.getSwapchainImagesKHR(swapchain);
-	ERROR_IF(failed(result), stl::fmt("Could not fetch images with %s", to_cstring(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), stl::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
 
 	u32 i_ = 0;
 	for (auto& image_ : images) {
@@ -86,7 +85,7 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 			.image = image,
 			.viewType = vk::ImageViewType::e2D,
 			.format = format,
-			.components = {},	// All Identity
+			.components = {}, // All Identity
 			.subresourceRange = {
 				.aspectMask = vk::ImageAspectFlagBits::eColor,
 				.baseMipLevel = 0,
@@ -95,7 +94,7 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 				.layerCount = 1,
 			},
 		});
-		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
+		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
 	}
 
 	i_ = 0;
@@ -129,15 +128,14 @@ void Swapchain::recreate() noexcept {
 			present_mode = i_mode;
 			break;
 		}
-		else if (i_mode == vk::PresentModeKHR::eImmediate) {
+		if (i_mode == vk::PresentModeKHR::eImmediate) {
 			present_mode = i_mode;
 		}
 	}
 
 	if (support.capabilities.currentExtent.width != max_value<u32>) {
 		extent = support.capabilities.currentExtent;
-	}
-	else {
+	} else {
 		extent.width = stl::clamp(parent_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
 		extent.height = stl::clamp(parent_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
 	}
@@ -147,7 +145,7 @@ void Swapchain::recreate() noexcept {
 		image_count = stl::min(image_count, support.capabilities.maxImageCount);
 	}
 
-	requires_ownership_transfer = (parent_device->queue_families.graphics_idx != parent_device->queue_families.present_idx);	// needs transfer if not the same queue
+	requires_ownership_transfer = (parent_device->queue_families.graphics_idx != parent_device->queue_families.present_idx); // needs transfer if not the same queue
 
 	vk::Result result;
 	tie(result, swapchain) = parent_device->device.createSwapchainKHR({
@@ -167,12 +165,12 @@ void Swapchain::recreate() noexcept {
 		.clipped = true,
 		.oldSwapchain = swapchain
 	});
-	ERROR_IF(failed(result), stl::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstring(result))) ELSE_INFO(stl::fmt("Swapchain '%s' recreated!", name.data()));
+	ERROR_IF(failed(result), stl::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstr(result))) ELSE_INFO(stl::fmt("Swapchain '%s' recreated!", name.data()));
 
 	parent_device->set_object_name(swapchain, name);
 
 	tie(result, images) = parent_device->device.getSwapchainImagesKHR(swapchain);
-	ERROR_IF(failed(result), stl::fmt("Could not fetch images with %s", to_cstring(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), stl::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
 
 	u32 i_ = 0;
 	for (auto& image_ : images) {
@@ -181,7 +179,7 @@ void Swapchain::recreate() noexcept {
 
 	// TODO: See if this needs to be / can be async
 	result = parent_device->device.waitIdle();
-	ERROR_IF(failed(result), stl::fmt("Device idling on %s failed with %s", parent_device->name.data(), to_cstring(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), stl::fmt("Device idling on %s failed with %s", parent_device->name.data(), to_cstr(result))) THEN_CRASH(result);
 	for (auto& image_view : image_views) {
 		parent_device->device.destroyImageView(image_view);
 	}
@@ -193,7 +191,7 @@ void Swapchain::recreate() noexcept {
 			.image = image,
 			.viewType = vk::ImageViewType::e2D,
 			.format = format,
-			.components = {},	// All Identity
+			.components = {}, // All Identity
 			.subresourceRange = {
 				.aspectMask = vk::ImageAspectFlagBits::eColor,
 				.baseMipLevel = 0,
@@ -202,7 +200,7 @@ void Swapchain::recreate() noexcept {
 				.layerCount = 1,
 			},
 		});
-		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
+		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
 	}
 
 	i_ = 0;

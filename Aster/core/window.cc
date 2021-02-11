@@ -7,7 +7,7 @@
 #include <core/context.h>
 #include <core/glfw_context.h>
 
-void Window::init(const Context* _context, u32 _width, u32 _height, const stl::string& _title, b8 _full_screen) noexcept {
+void Window::init(const stl::string& _title, const Context* _context, u32 _width, u32 _height, b8 _full_screen) noexcept {
 	extent = vk::Extent2D{ .width = _width, .height = _height };
 	name = _title;
 	full_screen = _full_screen;
@@ -24,7 +24,7 @@ void Window::init(const Context* _context, u32 _width, u32 _height, const stl::s
 	window = glfwCreateWindow(extent.width, extent.height, name.data(), full_screen ? monitor : nullptr, nullptr);
 	ERROR_IF(window == nullptr, "Window creation failed") ELSE_INFO(stl::fmt("Window '%s' created with resolution '%dx%d'", name.data(), extent.width, extent.height));
 	if (window == nullptr) {
-		auto code = GLFWContext::post_error();
+		auto code = GlfwContext::post_error();
 		glfwTerminate();
 		CRASH(code);
 	}
@@ -35,7 +35,7 @@ void Window::init(const Context* _context, u32 _width, u32 _height, const stl::s
 	glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 
 	VkSurfaceKHR surface_;
-	vk::Result result = cast<vk::Result>(glfwCreateWindowSurface(cast<VkInstance>(_context->instance), window, nullptr, &surface_));
+	auto result = cast<vk::Result>(glfwCreateWindowSurface(cast<VkInstance>(_context->instance), window, nullptr, &surface_));
 	ERROR_IF(failed(result), "Failed to create Surface with "s + to_string(result)) THEN_CRASH(result) ELSE_INFO("Surface Created");
 	surface = vk::SurfaceKHR(surface_);
 }

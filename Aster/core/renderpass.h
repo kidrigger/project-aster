@@ -8,12 +8,12 @@
 #include <core/device.h>
 
 struct RenderPass {
-    vk::RenderPass renderpass;
-    stl::string name;
-    usize attachment_format;
-    Device* parent_device;
+	vk::RenderPass renderpass;
+	stl::string name;
+	usize attachment_format;
+	Device* parent_device;
 
-    static vk::ResultValue<RenderPass> create(Device* _device, const stl::string& _name, const vk::RenderPassCreateInfo& _create_info);
+	static vk::ResultValue<RenderPass> create(const stl::string& _name, Device* _device, const vk::RenderPassCreateInfo& _create_info);
 
-    void destroy();
+	void destroy();
 };

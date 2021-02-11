@@ -21,19 +21,19 @@ struct QueueFamilyIndices {
 	u32 compute_idx{ INVALID_VALUE };
 	u32 transfer_idx{ INVALID_VALUE };
 
-	inline bool has_graphics() const {
+	bool has_graphics() const {
 		return graphics_idx != INVALID_VALUE;
 	}
 
-	inline bool has_present() const {
+	bool has_present() const {
 		return present_idx != INVALID_VALUE;
 	}
 
-	inline bool has_compute() const {
+	bool has_compute() const {
 		return compute_idx != INVALID_VALUE;
 	}
 
-	inline bool has_transfer() const {
+	bool has_transfer() const {
 		return transfer_idx != INVALID_VALUE;
 	}
 };
@@ -54,7 +54,7 @@ struct Buffer {
 	usize size = 0;
 	stl::string name;
 
-	static vk::ResultValue<Buffer> create(Device* _device, const stl::string& _name, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
+	static vk::ResultValue<Buffer> create(const stl::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
 
 	void destroy();
 };
@@ -74,28 +74,40 @@ struct Image {
 	u32 layer_count;
 	u32 mip_count;
 
-	static vk::ResultValue<Image> create(Device* _device, const stl::string& _name, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
+	static vk::ResultValue<Image> create(const stl::string& _name, Device* _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
 
 	void destroy();
 };
 
-struct Buffer;
+struct ImageView {
+	Image* parent_image;
+	vk::ImageView image_view;
+	vk::Format format;
+	vk::ImageViewType type;
+	vk::ImageSubresourceRange subresource_range;
+	stl::string name;
+
+	static vk::ResultValue<ImageView> create(Image* _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
+
+	void destroy();
+};
+
 template <typename T>
 struct SubmitTask;
 
 struct Device {
 
-	void init(const stl::string& name, Context* context, Window* window) noexcept;
+	void init(const stl::string& _name, Context* _context, Window* _window) noexcept;
 	void destroy() noexcept;
 
-	i32 device_score(const Context* context, const Window* window, vk::PhysicalDevice device) noexcept;
+	i32 device_score(const Context* _context, const Window* _window, vk::PhysicalDevice _device) noexcept;
 	QueueFamilyIndices get_queue_families(const Window* window, vk::PhysicalDevice device);
 
 	template <typename T>
 	void set_object_name(const T& _obj, const stl::string_view& _name) const {
 		auto result = device.setDebugUtilsObjectNameEXT({
 			.objectType = _obj.objectType,
-			.objectHandle = get_vkhandle(_obj),
+			.objectHandle = get_vk_handle(_obj),
 			.pObjectName = _name.data(),
 		});
 		WARN_IF(failed(result), "Debug Utils name setting failed with "s + to_string(result));
@@ -115,7 +127,7 @@ struct Device {
 	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const stl::span<u8>& _data);
 	void update_data(Buffer* _host_buffer, const stl::span<u8>& _data);
 
-// fields
+	// fields
 	Context* parent_context;
 	vk::PhysicalDevice physical_device;
 	vk::PhysicalDeviceProperties physical_device_properties;
@@ -129,6 +141,8 @@ struct Device {
 	vk::CommandPool graphics_cmd_pool;
 
 	stl::string name;
+
+private:
 	void set_name(const stl::string& _name);
 };
 
@@ -143,32 +157,32 @@ struct SubmitTask {
 	vk::Result submit(Device* _device, T& _payload, vk::Queue _queue, vk::CommandPool _pool, stl::vector<vk::CommandBuffer> _cmd, stl::vector<vk::Semaphore> _wait_on = {}, stl::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
-		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstring(result)));
+		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstr(result)));
 		fence = _fence;
 		payload = _payload;
 		cmd = _cmd;
 		pool = _pool;
 
 		return _queue.submit({
-			{
-				.waitSemaphoreCount = cast<u32>(_wait_on.size()),
-				.pWaitSemaphores = _wait_on.data(),
-				.commandBufferCount = cast<u32>(_cmd.size()),
-				.pCommandBuffers = _cmd.data(),
-				.signalSemaphoreCount = cast<u32>(_signal_to.size()),
-				.pSignalSemaphores = _signal_to.data(),
-			}
-		},
-		_fence);
+				{
+					.waitSemaphoreCount = cast<u32>(_wait_on.size()),
+					.pWaitSemaphores = _wait_on.data(),
+					.commandBufferCount = cast<u32>(_cmd.size()),
+					.pCommandBuffers = _cmd.data(),
+					.signalSemaphoreCount = cast<u32>(_signal_to.size()),
+					.pSignalSemaphores = _signal_to.data(),
+				}
+			},
+			_fence);
 	}
 
-	[[nodiscard]] vk::Result  wait() {
+	[[nodiscard]] vk::Result wait() {
 		return this->destroy();
 	}
 
-	[[nodiscard]] vk::Result  destroy() {
-		auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
-		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result)));
+	[[nodiscard]] vk::Result destroy() {
+		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstr(result)));
 		payload.destroy();
 		device->device.destroyFence(fence);
 		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
@@ -185,32 +199,33 @@ struct SubmitTask<void> {
 	vk::CommandPool pool;
 
 	[[nodiscard]] vk::Result submit(Device* _device, vk::Queue _queue, vk::CommandPool _pool, stl::vector<vk::CommandBuffer> _cmd, stl::vector<vk::Semaphore> _wait_on = {},
-		vk::PipelineStageFlags _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, stl::vector<vk::Semaphore> _signal_to = {}) {
+	                                const vk::PipelineStageFlags& _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, stl::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
-		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstring(result)));
+		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstr(result)));
 		fence = _fence;
 		cmd = _cmd;
 		pool = _pool;
-		return _queue.submit({ vk::SubmitInfo{
-			.waitSemaphoreCount = cast<u32>(_wait_on.size()),
-			.pWaitSemaphores = _wait_on.data(),
-			.pWaitDstStageMask = &_wait_stage,
-			.commandBufferCount = cast<u32>(_cmd.size()),
-			.pCommandBuffers = _cmd.data(),
-			.signalSemaphoreCount = cast<u32>(_signal_to.size()),
-			.pSignalSemaphores = _signal_to.data(),
-		} },
-		_fence);
+		return _queue.submit({
+				vk::SubmitInfo{
+					.waitSemaphoreCount = cast<u32>(_wait_on.size()),
+					.pWaitSemaphores = _wait_on.data(),
+					.pWaitDstStageMask = &_wait_stage,
+					.commandBufferCount = cast<u32>(_cmd.size()),
+					.pCommandBuffers = _cmd.data(),
+					.signalSemaphoreCount = cast<u32>(_signal_to.size()),
+					.pSignalSemaphores = _signal_to.data(),
+				} },
+			_fence);
 	}
 
-	[[nodiscard]] vk::Result wait() {
+	[[nodiscard]] vk::Result wait_and_destroy() {
 		return this->destroy();
 	}
 
 	[[nodiscard]] vk::Result destroy() {
-		auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
-		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstring(result)));
+		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstr(result)));
 		device->device.destroyFence(fence);
 		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
 		return result;

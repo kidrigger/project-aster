@@ -19,10 +19,12 @@ struct Logger {
 
 	u32 minimum_logging_level{ cast<u32>(LogType::eDebug) };
 
-	inline void set_minimum_logging_level(LogType _log_type) { minimum_logging_level = cast<u32>(_log_type); }
+	void set_minimum_logging_level(LogType _log_type) {
+		minimum_logging_level = cast<u32>(_log_type);
+	}
 
 	template <LogType log_t>
-	inline constexpr static const char* to_cstr() {
+	constexpr static const char* to_cstr() {
 		if constexpr (log_t == LogType::eError) return "[ERROR]:";
 		if constexpr (log_t == LogType::eWarning) return "[WARN]: ";
 		if constexpr (log_t == LogType::eInfo) return "[INFO]: ";
@@ -31,7 +33,7 @@ struct Logger {
 	}
 
 	template <LogType log_t>
-	inline constexpr static const char* to_color_cstr() {
+	constexpr static const char* to_color_cstr() {
 		if constexpr (log_t == LogType::eError) return ANSI_Red;
 		if constexpr (log_t == LogType::eWarning) return ANSI_Yellow;
 		if constexpr (log_t == LogType::eInfo) return ANSI_Green;
@@ -40,9 +42,8 @@ struct Logger {
 	}
 
 	template <LogType log_t>
-	inline void log(const char* _message, const char* loc, u32 line) {
-		if (cast<u32>(log_t) <= minimum_logging_level)
-			printf("%s%s %s%s| at %s:%u%s\n", to_color_cstr<log_t>(), to_cstr<log_t>(), _message, ANSI_Black, loc, line, ANSI_Reset);
+	void log(const char* _message, const char* loc, u32 line) {
+		if (cast<u32>(log_t) <= minimum_logging_level) printf("%s%s %s%s| at %s:%u%s\n", to_color_cstr<log_t>(), to_cstr<log_t>(), _message, ANSI_Black, loc, line, ANSI_Reset);
 #if !defined(NDEBUG)
 		if constexpr (log_t == LogType::eError) {
 			__debugbreak();
@@ -51,14 +52,13 @@ struct Logger {
 	}
 
 	template <LogType log_t>
-	inline void log(const std::string& message, const char* loc, u32 line) {
+	void log(const std::string& message, const char* loc, u32 line) {
 		return log<log_t>(message.c_str(), loc, line);
 	}
 
 	template <LogType log_t>
-	inline void log_cond(const char* expr_str, const char* message, const char* loc, u32 line) {
-		if (cast<u32>(log_t) <= minimum_logging_level)
-			printf("%s%s (%s) %s%s| at %s:%u%s\n", to_color_cstr<log_t>(), to_cstr<log_t>(), expr_str, message, ANSI_Black, loc, line, ANSI_Reset);
+	void log_cond(const char* expr_str, const char* message, const char* loc, u32 line) {
+		if (cast<u32>(log_t) <= minimum_logging_level) printf("%s%s (%s) %s%s| at %s:%u%s\n", to_color_cstr<log_t>(), to_cstr<log_t>(), expr_str, message, ANSI_Black, loc, line, ANSI_Reset);
 #if !defined(NDEBUG)
 		if constexpr (log_t == LogType::eError) {
 			__debugbreak();
@@ -66,9 +66,9 @@ struct Logger {
 #endif // !defined(NDEBUG)
 	}
 
-    template <LogType log_t>
-    inline void log_cond(const char* expr_str, const std::string& message, const char* loc, u32 line) {
-        log_cond<log_t>(expr_str, message.data(), loc, line);
+	template <LogType log_t>
+	void log_cond(const char* expr_str, const std::string& message, const char* loc, u32 line) {
+		log_cond<log_t>(expr_str, message.data(), loc, line);
 	}
 };
 

@@ -49,9 +49,21 @@ struct SunData {
 	alignas(04) i32 _pad1;
 };
 
-inline static Pipeline* lut_pipeline = nullptr;
+struct TransmittanceContext {
+	Pipeline* pipeline;
+	RenderPass renderpass;
+	vk::Framebuffer framebuffer;
 
-void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos, Image* _image);
+	Image lut;
+	vk::ImageView lut_view;
+	vk::Sampler lut_sampler;
+
+	PipelineFactory* parent_factory;
+
+	void init(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos);
+	void recalculate(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos);
+	void destroy();
+};
 
 struct SkyviewContext {
 	Pipeline* pipeline;
@@ -297,43 +309,15 @@ int main() {
 		.view_samples = 3000,
 	};
 
-#pragma region ======== Transmittance Commands ==================================================================================================================
-	
-	Image transmittance_lut;
-	vk::ImageView transmittance_view;
-	vk::Sampler transmittance_sampler;
-	
-	tie(result, transmittance_lut) = Image::create(&device, "Transmittance LUT", vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, { 64, 256, 1 }, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
-	ERROR_IF(failed(result), stl::fmt("LUT Image could not be created with %s", to_cstring(result)));
+#pragma region ======== LUT Setup ==================================================================================================================
 
-	calculate_transmittance_lut(&device, &pipeline_factory, atmosphere_info, &transmittance_lut);
-
-	tie(result, transmittance_view) = device.device.createImageView({
-		.image = transmittance_lut.image,
-		.viewType = vk::ImageViewType::e2D,
-		.format = transmittance_lut.format,
-		.subresourceRange = {
-			.aspectMask = vk::ImageAspectFlagBits::eColor,
-			.levelCount = 1,
-			.layerCount = 1,
-		},
-	});
-	ERROR_IF(failed(result), "LUT Image View could not be created");
-	device.set_object_name(transmittance_view, transmittance_lut.name + " view");
-	
-	tie(result, transmittance_sampler) = device.device.createSampler({
-		.magFilter = vk::Filter::eLinear,
-		.minFilter = vk::Filter::eLinear,
-		.addressModeU = vk::SamplerAddressMode::eClampToEdge,
-		.addressModeV = vk::SamplerAddressMode::eClampToEdge,
-	});
-	ERROR_IF(failed(result), "LUT Image Sampler could not be created");
-	device.set_object_name(transmittance_view, transmittance_lut.name + " sampler");
-
-#pragma endregion
+	TransmittanceContext transmittance;
+	transmittance.init(&pipeline_factory, atmosphere_info);
 
 	SkyviewContext skyview;
-	skyview.init(&pipeline_factory, &transmittance_lut, transmittance_view, transmittance_sampler);
+	skyview.init(&pipeline_factory, &transmittance.lut, transmittance.lut_view, transmittance.lut_sampler);
+
+#pragma endregion
 
 	// ======== Buffer Setup ==================================================================================================================
 	stl::vector<Buffer> ubos;
@@ -372,8 +356,8 @@ int main() {
 			};
 
 			vk::DescriptorImageInfo transmittance_image_info = {
-				.sampler = transmittance_sampler,
-				.imageView = transmittance_view,
+				.sampler = transmittance.lut_sampler,
+				.imageView = transmittance.lut_view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
 
@@ -524,7 +508,7 @@ int main() {
 				Gui::InputInt("Depth Samples", &atmosphere_info.depth_samples, 10, 100);
 				Gui::InputInt("View Samples", &atmosphere_info.view_samples, 1, 10);
 				if (Gui::Button("Recalculate Transmittance")) {
-					calculate_transmittance_lut(&device, &pipeline_factory, atmosphere_info, &transmittance_lut);
+					transmittance.recalculate(&pipeline_factory, atmosphere_info);
 				}
 			}
 
@@ -564,7 +548,7 @@ int main() {
 			OPTICK_EVENT("Reset Command Pool");
 			device.device.resetCommandPool(current_frame->command_pool, {});
 		}
-		vk::CommandBuffer cmd = current_frame->command_buffer;
+		auto& cmd = current_frame->command_buffer;
 
 		result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
 		ERROR_IF(failed(result), stl::fmt("Cmd Buffer begin failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_VERBOSE("Start Cmd Buffer");
@@ -677,11 +661,7 @@ int main() {
 
 	skyview.destroy();
 
-	device.device.destroySampler(transmittance_sampler);
-	device.device.destroyImageView(transmittance_view);
-
-	lut_pipeline->destroy();
-	transmittance_lut.destroy();
+	transmittance.destroy();
 
 	Gui::Destroy();
 	camera_controller.destroy();
@@ -695,29 +675,39 @@ int main() {
 	return 0;
 }
 
-void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos, Image* _image) {
-	Pipeline* pipeline;
-	RenderPass renderpass;
-	vk::Framebuffer framebuffer;
-	vk::ImageView lut_view;
-	vk::CommandBuffer cmd;
+void TransmittanceContext::init(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos) {
 	vk::Result result;
 
-	tie(result, lut_view) = _device->device.createImageView({
-		.image = _image->image,
+	parent_factory = _pipeline_factory;
+	auto* device = _pipeline_factory->parent_device;
+	
+	tie(result, lut) = Image::create(device, "Transmittance LUT", vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, { 64, 256, 1 }, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
+	ERROR_IF(failed(result), stl::fmt("LUT Image could not be created with %s", to_cstring(result)));
+
+	tie(result, lut_view) = device->device.createImageView({
+		.image = lut.image,
 		.viewType = vk::ImageViewType::e2D,
-		.format = _image->format,
+		.format = lut.format,
 		.subresourceRange = {
 			.aspectMask = vk::ImageAspectFlagBits::eColor,
 			.levelCount = 1,
 			.layerCount = 1,
 		},
-	});
-	ERROR_IF(failed(result), stl::fmt("LUT Image View could not be created with %s", to_cstring(result)));
-	_device->set_object_name(lut_view, _image->name + " view");
+		});
+	ERROR_IF(failed(result), "LUT Image View could not be created");
+	device->set_object_name(lut_view, lut.name + " view");
 
+	tie(result, lut_sampler) = device->device.createSampler({
+		.magFilter = vk::Filter::eLinear,
+		.minFilter = vk::Filter::eLinear,
+		.addressModeU = vk::SamplerAddressMode::eClampToEdge,
+		.addressModeV = vk::SamplerAddressMode::eClampToEdge,
+		});
+	ERROR_IF(failed(result), "LUT Image Sampler could not be created");
+	device->set_object_name(lut_view, lut.name + " sampler");
+	
 	vk::AttachmentDescription attach_desc = {
-		.format = _image->format,
+		.format = lut.format,
 		.loadOp = vk::AttachmentLoadOp::eClear,
 		.storeOp = vk::AttachmentStoreOp::eStore,
 		.stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
@@ -754,20 +744,20 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency
-	});
+		});
 	ERROR_IF(failed(result), stl::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstring(result))) THEN_CRASH(result) ELSE_INFO(stl::fmt("Renderpass %s Created", renderpass.name.c_str()));
 
 	// Framebuffer
-	tie(result, framebuffer) = _device->device.createFramebuffer({
+	tie(result, framebuffer) = device->device.createFramebuffer({
 		.renderPass = renderpass.renderpass,
 		.attachmentCount = 1,
 		.pAttachments = &lut_view,
-		.width = _image->extent.width,
-		.height = _image->extent.height,
+		.width = lut.extent.width,
+		.height = lut.extent.height,
 		.layers = 1,
 	});
 	ERROR_IF(failed(result), stl::fmt("LUT Framebuffer creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
-	_device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
+	device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
 
 	tie(result, pipeline) = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
@@ -777,8 +767,8 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 				{
 					.x = 0.0f,
 					.y = 0.0f,
-					.width = cast<f32>(_image->extent.width),
-					.height = cast<f32>(_image->extent.height),
+					.width = cast<f32>(lut.extent.width),
+					.height = cast<f32>(lut.extent.height),
 					.minDepth = 0.0f,
 					.maxDepth = 1.0f,
 				}
@@ -786,7 +776,7 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 			.scissors = {
 				{
 					.offset = {0, 0},
-					.extent = {_image->extent.width, _image->extent.height},
+					.extent = {lut.extent.width, lut.extent.height},
 				}
 			}
 		},
@@ -798,11 +788,14 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 	});
 	ERROR_IF(failed(result), stl::fmt("LUT Pipeline creation failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
 
-	if (lut_pipeline == nullptr) lut_pipeline = pipeline;
+	recalculate(_pipeline_factory, _atmos);
+}
 
+void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos) {
+	
 	rdoc::start_capture();
-
-	tie(result, cmd) = _device->alloc_temp_command_buffer(_device->graphics_cmd_pool);
+	auto* device = _pipeline_factory->parent_device;
+	auto [result, cmd] = device->alloc_temp_command_buffer(device->graphics_cmd_pool);
 
 	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
 	ERROR_IF(failed(result), stl::fmt("Command buffer begin failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Cmd Created");
@@ -818,7 +811,7 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 		.framebuffer = framebuffer,
 		.renderArea = {
 			.offset = {0, 0},
-			.extent = {_image->extent.width, _image->extent.height},
+			.extent = {lut.extent.width, lut.extent.height},
 		},
 		.clearValueCount = 1,
 		.pClearValues = &clear_val,
@@ -836,17 +829,24 @@ void calculate_transmittance_lut(Device* _device, PipelineFactory* _pipeline_fac
 	ERROR_IF(failed(result), stl::fmt("Command buffer end failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("Command buffer Created");
 
 	SubmitTask<void> task;
-	result = task.submit(_device, _device->queues.graphics, _device->graphics_cmd_pool, { cmd });
+	result = task.submit(device, device->queues.graphics, device->graphics_cmd_pool, { cmd });
 	ERROR_IF(failed(result), stl::fmt("Submit failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("LUT Submitted Created");
 
 	result = task.wait();
 	ERROR_IF(failed(result), stl::fmt("Fence waiting failed with %s", to_cstring(result))) THEN_CRASH(result) ELSE_INFO("LUT Written to");
 
 	rdoc::end_capture();
+}
 
-	_device->device.destroyImageView(lut_view);
+void TransmittanceContext::destroy() {
+	auto* device = parent_factory->parent_device;
+
+	lut.destroy();
+	device->device.destroyImageView(lut_view);
+	device->device.destroySampler(lut_sampler);
+	
 	pipeline->destroy();
-	_device->device.destroyFramebuffer(framebuffer);
+	device->device.destroyFramebuffer(framebuffer);
 	renderpass.destroy();
 }
 

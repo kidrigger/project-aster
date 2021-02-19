@@ -9,9 +9,6 @@
     <ClCompile Include="logger.cc" />
     <ClCompile Include="global.cc" />
     <ClCompile Include="util\files.cc" />
-    <ClCompile Include="source.cc">
-      <Filter>Main</Filter>
-    </ClCompile>
     <ClCompile Include="core\context.cc" />
     <ClCompile Include="core\device.cc" />
     <ClCompile Include="core\swapchain.cc" />

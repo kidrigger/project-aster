@@ -10,16 +10,14 @@
 
 struct Window final {
 
-	const Context* parent_context{ nullptr };
+	Window(const std::string_view& _title, const Context* _context, vk::Extent2D _extent, b8 _full_screen = false);
 
-	GLFWwindow* window{ nullptr };
-	GLFWmonitor* monitor{ nullptr };
-	vk::SurfaceKHR surface;
-	vk::Extent2D extent;
-	stl::string name;
-	b8 full_screen{ false };
+	Window(const Window& _other) = delete;
+	Window(Window&& _other) noexcept;
+	Window& operator=(const Window& _other) = delete;
+	Window& operator=(Window&& _other) noexcept;
 
-	void init(const stl::string& _title, const Context* _context, u32 _width, u32 _height, b8 _full_screen) noexcept;
+	~Window();
 
 	bool should_close() noexcept {
 		return glfwWindowShouldClose(window);
@@ -35,9 +33,17 @@ struct Window final {
 		glfwSetWindowSize(window, extent.width, extent.height);
 	}
 
-	void set_window_size(u32 _width, u32 _height) noexcept {
+	void set_window_size(const u32 _width, const u32 _height) noexcept {
 		set_window_size({ _width, _height });
 	}
 
-	void destroy() noexcept;
+	// fields
+	const Context* parent_context{ nullptr };
+
+	GLFWwindow* window{ nullptr };
+	GLFWmonitor* monitor{ nullptr };
+	vk::SurfaceKHR surface;
+	vk::Extent2D extent;
+	std::string name;
+	b8 full_screen{ false };
 };

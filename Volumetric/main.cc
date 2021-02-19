@@ -4,6 +4,7 @@
 /*=========================================*/
 #include <global.h>
 #include <logger.h>
+#include <set>
 
 #include <core/glfw_context.h>
 #include <core/window.h>
@@ -50,7 +51,7 @@ struct SunData {
 };
 
 struct TransmittanceContext {
-	Pipeline* pipeline;
+	Pipeline* pipeline{};
 	RenderPass renderpass;
 	vk::Framebuffer framebuffer;
 
@@ -60,12 +61,12 @@ struct TransmittanceContext {
 
 	PipelineFactory* parent_factory;
 
-	void init(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos);
+	TransmittanceContext(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos);
 	void recalculate(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos);
-	void destroy();
+	~TransmittanceContext();
 };
 
-struct SkyviewContext {
+struct SkyViewContext {
 	Pipeline* pipeline;
 	RenderPass renderpass;
 	vk::Framebuffer framebuffer;
@@ -81,32 +82,84 @@ struct SkyviewContext {
 
 	PipelineFactory* parent_factory;
 
-	void init(PipelineFactory* _pipeline_factory, TransmittanceContext* _transmittance);
+	SkyViewContext(PipelineFactory* _pipeline_factory, TransmittanceContext* _transmittance);
 	void update(Camera* _camera, SunData* _sun_data, AtmosphereInfo* _atmos);
 	void recalculate(vk::CommandBuffer _cmd);
-	void destroy();
+	~SkyViewContext();
 };
 
 i32 main() {
 
 	g_logger.set_minimum_logging_level(Logger::LogType::eDebug);
 
-	Context context;
-	Window window;
-	Device device;
-	Swapchain swapchain;
 	Camera camera;
 	CameraController camera_controller;
-	PipelineFactory pipeline_factory;
 
-	GlfwContext::init();
-	context.init("Aster Core", { 0, 0, 1 });
-	window.init(PROJECT_NAME, &context, 1280u, 720u, false);
-	device.init("Primary", &context, &window);
-	swapchain.init(window.name, &window, &device);
-	camera.init({ 0, 1, 0 }, { 0, 0, 1 }, window.extent, 0.1f, 30.0f, 70_deg);
+	GlfwContext glfw{};
+	Context context{ "Aster Core", { 0, 0, 1 } };
+	Window window{ PROJECT_NAME, &context, { 1280u, 720u } };
+
+	vk::PhysicalDeviceFeatures enabled_device_features = {
+		.depthClamp = true,
+		.samplerAnisotropy = true,
+		.shaderSampledImageArrayDynamicIndexing = true,
+	};
+
+#pragma region Device Selection
+	using DInfo = Device::PhysicalDeviceInfo;
+	auto physical_device_info = DeviceSelector{ &context, &window }.select_on([](DInfo& _inf) {
+		return _inf.queue_family_indices.has_graphics() && _inf.queue_family_indices.has_present();
+	}).select_on([_context = &context](DInfo& _inf) {
+		auto [result, extension_properties] = _inf.device.enumerateDeviceExtensionProperties();
+		std::vector<std::string> extensions(extension_properties.size());
+		std::ranges::transform(extension_properties, extensions.begin(), [](vk::ExtensionProperties& _ext) {
+			return cast<const char*>(_ext.extensionName);
+		});
+		const std::set<std::string> extension_set(extensions.begin(), extensions.end());
+		return std::ranges::all_of(_context->device_extensions, [&extension_set](auto& _ext) {
+			return extension_set.contains(_ext);
+		});
+	}).select_on([_window = &window](DInfo& _inf) {
+		auto [result0, surface_formats] = _inf.device.getSurfaceFormatsKHR(_window->surface);
+		if (failed(result0) || surface_formats.empty()) return false;
+
+		auto [result1, present_modes] = _inf.device.getSurfacePresentModesKHR(_window->surface);
+		if (failed(result1) || present_modes.empty()) return false;
+
+		return true;
+	}).sort_by([](DInfo& _inf) {
+		u32 score = 0;
+		if (_inf.properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
+			score += 2;
+		} else if (_inf.properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) {
+			score += 5;
+		}
+
+		if (_inf.queue_family_indices.has_compute()) {
+			score++;
+		}
+
+		const auto& device_features = _inf.features;
+		if (device_features.samplerAnisotropy) {
+			score++;
+		}
+		if (device_features.shaderSampledImageArrayDynamicIndexing) {
+			score++;
+		}
+		if (device_features.depthClamp) {
+			score++;
+		}
+		return score;
+	}).get();
+#pragma endregion
+
+	INFO(std::fmt("Using %s", physical_device_info.properties.deviceName.data()));
+
+	Device device{ "Primary", &context, physical_device_info, enabled_device_features };
+	Swapchain swapchain{ window.name, &window, &device };
+	camera.init({ 0, 1000, 0 }, { 0, 0, 1 }, window.extent, 0.1f, 30.0f, 70_deg);
 	camera_controller.init(&window, &camera, 10000.0f);
-	pipeline_factory.init(&device);
+	PipelineFactory pipeline_factory{ &device };
 
 	Gui::Init(&swapchain);
 
@@ -115,7 +168,7 @@ i32 main() {
 	vk::Result result;
 	Pipeline* pipeline;
 	RenderPass render_pass;
-	stl::vector<vk::Framebuffer> framebuffers;
+	std::vector<vk::Framebuffer> framebuffers;
 
 	vk::AttachmentDescription attach_desc = {
 		.format = swapchain.format,
@@ -156,29 +209,28 @@ i32 main() {
 		.dependencyCount = 1,
 		.pDependencies = &dependency,
 	});
-	ERROR_IF(failed(result), stl::fmt("Renderpass creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
+	ERROR_IF(failed(result), std::fmt("Renderpass creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
 
-	auto recreate_framebuffers_impl = [&render_pass, &device, &framebuffers, &swapchain]() {
-		vk::Result result_;
-		for (auto& fb : framebuffers) {
-			device.device.destroyFramebuffer(fb);
-		}
-		framebuffers.resize(swapchain.image_count);
+	auto recreate_framebuffers = std::function{
+		[&render_pass, &device, &framebuffers, &swapchain]() {
+			vk::Result result_;
+			for (auto& fb : framebuffers) {
+				device.device.destroyFramebuffer(fb);
+			}
+			framebuffers.resize(swapchain.image_count);
 
-		for (u32 i = 0; i < swapchain.image_count; ++i) {
-			tie(result_, framebuffers[i]) = device.device.createFramebuffer({
-				.renderPass = render_pass.renderpass,
-				.attachmentCount = 1,
-				.pAttachments = &swapchain.image_views[i],
-				.width = swapchain.extent.width,
-				.height = swapchain.extent.height,
-				.layers = 1,
-			});
-			ERROR_IF(failed(result_), stl::fmt("Framebuffer creation failed with %s", to_cstr(result_))) THEN_CRASH(result_) ELSE_INFO("Framebuffer Created");
+			for (u32 i = 0; i < swapchain.image_count; ++i) {
+				tie(result_, framebuffers[i]) = device.device.createFramebuffer({
+					.renderPass = render_pass.renderpass,
+					.attachmentCount = 1,
+					.pAttachments = &swapchain.image_views[i],
+					.width = swapchain.extent.width,
+					.height = swapchain.extent.height,
+					.layers = 1,
+				});
+				ERROR_IF(failed(result_), std::fmt("Framebuffer creation failed with %s", to_cstr(result_))) THEN_CRASH(result_) ELSE_INFO("Framebuffer Created");
+			}
 		}
-	};
-	auto recreate_framebuffers = [&recreate_framebuffers_impl]() {
-		return recreate_framebuffers_impl();
 	};
 
 	recreate_framebuffers();
@@ -192,9 +244,9 @@ i32 main() {
 		.dynamic_states = { vk::DynamicState::eViewport, vk::DynamicState::eScissor },
 		.name = "Main Pipeline"
 	});
-	ERROR_IF(failed(result), stl::fmt("Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Created");
+	ERROR_IF(failed(result), std::fmt("Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Created");
 
-	stl::vector<vk::DescriptorPoolSize> pool_sizes = {
+	std::vector<vk::DescriptorPoolSize> pool_sizes = {
 		{
 			.type = vk::DescriptorType::eUniformBuffer,
 			.descriptorCount = swapchain.image_count * 3,
@@ -216,9 +268,9 @@ i32 main() {
 		.pPoolSizes = pool_sizes.data(),
 	});
 
-	stl::vector<vk::DescriptorSet> descriptor_sets;
+	std::vector<vk::DescriptorSet> descriptor_sets;
 	{
-		stl::vector<vk::DescriptorSetLayout> layouts(swapchain.image_count, pipeline->layout->descriptor_set_layouts.front());
+		std::vector<vk::DescriptorSetLayout> layouts(swapchain.image_count, pipeline->layout->descriptor_set_layouts.front());
 		tie(result, descriptor_sets) = device.device.allocateDescriptorSets({
 			.descriptorPool = descriptor_pool,
 			.descriptorSetCount = cast<u32>(layouts.size()),
@@ -241,23 +293,23 @@ i32 main() {
 			vk::Result result;
 
 			tie(result, image_available_sem) = _device->device.createSemaphore({});
-			ERROR_IF(failed(result), stl::fmt("Image available semaphore creation failed with %s", to_cstr(result))) THEN_CRASH(result);
-			_device->set_object_name(image_available_sem, stl::fmt("Frame %d Image Available Sem", _frame_index));
+			ERROR_IF(failed(result), std::fmt("Image available semaphore creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			_device->set_object_name(image_available_sem, std::fmt("Frame %d Image Available Sem", _frame_index));
 
 			tie(result, render_finished_sem) = _device->device.createSemaphore({});
-			ERROR_IF(failed(result), stl::fmt("Render finished semaphore creation failed with %s", to_cstr(result))) THEN_CRASH(result);
-			_device->set_object_name(render_finished_sem, stl::fmt("Frame %d Render Finished Sem", _frame_index));
+			ERROR_IF(failed(result), std::fmt("Render finished semaphore creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			_device->set_object_name(render_finished_sem, std::fmt("Frame %d Render Finished Sem", _frame_index));
 
 			tie(result, in_flight_fence) = _device->device.createFence({ .flags = vk::FenceCreateFlagBits::eSignaled });
-			ERROR_IF(failed(result), stl::fmt("In flight fence creation failed with %s", to_cstr(result))) THEN_CRASH(result);
-			_device->set_object_name(render_finished_sem, stl::fmt("Frame %d In Flight Fence", _frame_index));
+			ERROR_IF(failed(result), std::fmt("In flight fence creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			_device->set_object_name(render_finished_sem, std::fmt("Frame %d In Flight Fence", _frame_index));
 
 			tie(result, command_pool) = _device->device.createCommandPool({
 				.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
 				.queueFamilyIndex = _device->queue_families.graphics_idx,
 			});
-			ERROR_IF(failed(result), stl::fmt("Command pool creation failed with %s", to_cstr(result))) THEN_CRASH(result);
-			_device->set_object_name(command_pool, stl::fmt("Frame %d Command Pool", _frame_index));
+			ERROR_IF(failed(result), std::fmt("Command pool creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			_device->set_object_name(command_pool, std::fmt("Frame %d Command Pool", _frame_index));
 
 			vk::CommandBufferAllocateInfo cmd_buf_alloc_info = {
 				.commandPool = command_pool,
@@ -265,8 +317,8 @@ i32 main() {
 				.commandBufferCount = 1,
 			};
 			result = _device->device.allocateCommandBuffers(&cmd_buf_alloc_info, &command_buffer);
-			ERROR_IF(failed(result), stl::fmt("Cmd Buffer allocation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Cmd Allocated Buffer");
-			_device->set_object_name(command_buffer, stl::fmt("Frame %d Command Buffer", _frame_index));
+			ERROR_IF(failed(result), std::fmt("Cmd Buffer allocation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Cmd Allocated Buffer");
+			_device->set_object_name(command_buffer, std::fmt("Frame %d Command Buffer", _frame_index));
 		}
 
 		void destroy() {
@@ -277,12 +329,12 @@ i32 main() {
 		}
 	};
 
-	stl::vector<Frame> frames(swapchain.image_count);
+	std::vector<Frame> frames(swapchain.image_count);
 	u32 i_ = 0;
 	for (auto& frame : frames) {
 		frame.init(&device, i_++);
 	}
-	stl::vector<Frame*> in_flight_frames;
+	std::vector<Frame*> in_flight_frames;
 	in_flight_frames.reserve(swapchain.image_count);
 	for (auto& frame : frames) {
 		in_flight_frames.push_back(&frame);
@@ -309,20 +361,18 @@ i32 main() {
 
 #pragma region ======== LUT Setup ==================================================================================================================
 
-	TransmittanceContext transmittance;
-	transmittance.init(&pipeline_factory, atmosphere_info);
+	TransmittanceContext transmittance{ &pipeline_factory, atmosphere_info };
 
-	SkyviewContext sky_view;
-	sky_view.init(&pipeline_factory, &transmittance);
+	SkyViewContext sky_view{ &pipeline_factory, &transmittance };
 
 #pragma endregion
 
 	// ======== Buffer Setup ==================================================================================================================
-	stl::vector<Buffer> uniform_buffers;
+	std::vector<Buffer> uniform_buffers;
 	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		tie(result, uniform_buffers.emplace_back()) = Buffer::create(stl::fmt("Camera Ubo %i", i), &device, closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256) + closest_multiple(sizeof(AtmosphereInfo), 256), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
+		tie(result, uniform_buffers.emplace_back()) = Buffer::create(std::fmt("Camera Ubo %i", i), &device, closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256) + closest_multiple(sizeof(AtmosphereInfo), 256), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
 		{
-			stl::vector<u8> buf_data(closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256) + closest_multiple(sizeof(AtmosphereInfo), 256));
+			std::vector<u8> buf_data(closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256) + closest_multiple(sizeof(AtmosphereInfo), 256));
 			usize cam_offset, sun_offset, atmos_offset;
 			usize offset = 0;
 			cam_offset = offset;
@@ -333,9 +383,9 @@ i32 main() {
 			offset += closest_multiple(sizeof(SunData), 256);
 			atmos_offset = offset;
 			memcpy(buf_data.data() + offset, &atmosphere_info, sizeof(AtmosphereInfo)); // TODO Fix hard-code
-			device.update_data(&uniform_buffers.back(), stl::span<u8>(buf_data.data(), buf_data.size()));
+			device.update_data(&uniform_buffers.back(), std::span<u8>(buf_data.data(), buf_data.size()));
 
-			stl::vector<vk::DescriptorBufferInfo> buf_info = {
+			std::vector<vk::DescriptorBufferInfo> buf_info = {
 				{
 					.buffer = uniform_buffers.back().buffer,
 					.offset = cam_offset,
@@ -452,9 +502,9 @@ i32 main() {
 
 			tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, current_frame->image_available_sem, {});
 
-			INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()))
+			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain.name.data()))
 			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
-			ELSE_IF_ERROR(failed(result), stl::fmt("Image acquire failed with %s", to_cstr(result))) THEN_CRASH(result)
+			ELSE_IF_ERROR(failed(result), std::fmt("Image acquire failed with %s", to_cstr(result))) THEN_CRASH(result)
 			ELSE_VERBOSE("Image Acquired");
 		}
 
@@ -522,7 +572,7 @@ i32 main() {
 		{
 			OPTICK_EVENT("Image wait");
 			result = device.device.waitForFences({ in_flight_frames[image_idx]->in_flight_fence }, true, max_value<u64>);
-			ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
+			ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
 			in_flight_frames[image_idx] = current_frame;
 		}
 
@@ -531,11 +581,11 @@ i32 main() {
 			camera_controller.update();
 			camera.update();
 
-			stl::vector<u8> buf_data(uniform_buffers[frame_idx].size);
+			std::vector<u8> buf_data(uniform_buffers[frame_idx].size);
 			memcpy(buf_data.data(), &camera, sizeof(Camera));
 			memcpy(buf_data.data() + closest_multiple(sizeof(Camera), 256), &sun, sizeof(SunData));                                                             // TODO Fix hardcode
 			memcpy(buf_data.data() + closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256), &atmosphere_info, sizeof(AtmosphereInfo)); // TODO Fix hardcode
-			device.update_data(&uniform_buffers[frame_idx], stl::span<u8>(buf_data.data(), buf_data.size()));
+			device.update_data(&uniform_buffers[frame_idx], std::span<u8>(buf_data.data(), buf_data.size()));
 		}
 
 		sky_view.update(&camera, &sun, &atmosphere_info);
@@ -549,7 +599,7 @@ i32 main() {
 		auto& cmd = current_frame->command_buffer;
 
 		result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
-		ERROR_IF(failed(result), stl::fmt("Cmd Buffer begin failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Start Cmd Buffer");
+		ERROR_IF(failed(result), std::fmt("Cmd Buffer begin failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Start Cmd Buffer");
 
 		sky_view.recalculate(cmd);
 
@@ -597,12 +647,12 @@ i32 main() {
 		Gui::Draw(cmd, image_idx);
 
 		result = cmd.end();
-		ERROR_IF(failed(result), stl::fmt("Cmd Buffer end failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("End Cmd Buffer");
+		ERROR_IF(failed(result), std::fmt("Cmd Buffer end failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("End Cmd Buffer");
 
 		vk::PipelineStageFlags wait_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
 		result = device.device.resetFences({ current_frame->in_flight_fence });
-		ERROR_IF(failed(result), stl::fmt("Fence reset failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Reset");
+		ERROR_IF(failed(result), std::fmt("Fence reset failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Reset");
 
 		{
 			OPTICK_EVENT("Submit");
@@ -617,7 +667,7 @@ i32 main() {
 			};
 			result = device.queues.graphics.submit({ submit_info }, current_frame->in_flight_fence);
 
-			ERROR_IF(failed(result), stl::fmt("Submission failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Submit");
+			ERROR_IF(failed(result), std::fmt("Submission failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Submit");
 		}
 
 		{
@@ -629,9 +679,9 @@ i32 main() {
 				.pSwapchains = &swapchain.swapchain,
 				.pImageIndices = &image_idx,
 			});
-			INFO_IF(result == vk::Result::eSuboptimalKHR, stl::fmt("Swapchain %s suboptimal", swapchain.name.data()))
+			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain.name.data()))
 			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
-			ELSE_IF_ERROR(failed(result), stl::fmt("Present failed with %s", to_cstr(result))) THEN_CRASH(result)
+			ELSE_IF_ERROR(failed(result), std::fmt("Present failed with %s", to_cstr(result))) THEN_CRASH(result)
 			ELSE_VERBOSE("Present");
 		}
 
@@ -639,7 +689,7 @@ i32 main() {
 	}
 
 	result = device.device.waitIdle();
-	ERROR_IF(failed(result), stl::fmt("Idling failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Idling failed with %s", to_cstr(result)));
 
 	// ======== Cleanup ==================================================================================================================
 
@@ -659,30 +709,21 @@ i32 main() {
 	}
 	render_pass.destroy();
 
-	sky_view.destroy();
-
-	transmittance.destroy();
-
 	Gui::Destroy();
 	camera_controller.destroy();
 	camera.destroy();
-	swapchain.destroy();
-	device.destroy();
-	window.destroy();
-	context.destroy();
-	GlfwContext::destroy();
 
 	return 0;
 }
 
-void TransmittanceContext::init(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos) {
+TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos) {
 	vk::Result result;
 
 	parent_factory = _pipeline_factory;
 	auto* device = _pipeline_factory->parent_device;
 
 	tie(result, lut) = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, { 64, 256, 1 }, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
-	ERROR_IF(failed(result), stl::fmt("LUT Image could not be created with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("LUT Image could not be created with %s", to_cstr(result)));
 
 	tie(result, lut_view) = ImageView::create(&lut, vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -739,7 +780,7 @@ void TransmittanceContext::init(PipelineFactory* _pipeline_factory, const Atmosp
 		.dependencyCount = 1,
 		.pDependencies = &dependency
 	});
-	ERROR_IF(failed(result), stl::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result))) THEN_CRASH(result) ELSE_INFO(stl::fmt("Renderpass %s Created", renderpass.name.c_str()));
+	ERROR_IF(failed(result), std::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result))) THEN_CRASH(result) ELSE_INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
 
 	// Framebuffer
 	tie(result, framebuffer) = device->device.createFramebuffer({
@@ -750,7 +791,7 @@ void TransmittanceContext::init(PipelineFactory* _pipeline_factory, const Atmosp
 		.height = lut.extent.height,
 		.layers = 1,
 	});
-	ERROR_IF(failed(result), stl::fmt("LUT Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
+	ERROR_IF(failed(result), std::fmt("LUT Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
 	device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
 
 	tie(result, pipeline) = _pipeline_factory->create_pipeline({
@@ -780,7 +821,7 @@ void TransmittanceContext::init(PipelineFactory* _pipeline_factory, const Atmosp
 		.shader_files = { R"(res/shaders/transmittance_lut.vs.spv)", R"(res/shaders/transmittance_lut.fs.spv)" },
 		.name = "LUT Pipeline",
 	});
-	ERROR_IF(failed(result), stl::fmt("LUT Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
+	ERROR_IF(failed(result), std::fmt("LUT Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
 
 	recalculate(_pipeline_factory, _atmos);
 }
@@ -793,7 +834,7 @@ void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const
 	auto [result, cmd] = device->alloc_temp_command_buffer(device->graphics_cmd_pool);
 
 	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
-	ERROR_IF(failed(result), stl::fmt("Command buffer begin failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Cmd Created");
+	ERROR_IF(failed(result), std::fmt("Command buffer begin failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Cmd Created");
 
 	cmd.beginDebugUtilsLabelEXT({
 		.pLabelName = "Transmittance LUT Calculation",
@@ -821,19 +862,19 @@ void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const
 	cmd.endDebugUtilsLabelEXT();
 
 	result = cmd.end();
-	ERROR_IF(failed(result), stl::fmt("Command buffer end failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Command buffer Created");
+	ERROR_IF(failed(result), std::fmt("Command buffer end failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Command buffer Created");
 
 	SubmitTask<void> task;
 	result = task.submit(device, device->queues.graphics, device->graphics_cmd_pool, { cmd });
-	ERROR_IF(failed(result), stl::fmt("Submit failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Submitted Created");
+	ERROR_IF(failed(result), std::fmt("Submit failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Submitted Created");
 
 	result = task.wait_and_destroy();
-	ERROR_IF(failed(result), stl::fmt("Fence waiting failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Written to");
+	ERROR_IF(failed(result), std::fmt("Fence waiting failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Written to");
 
 	rdoc::end_capture();
 }
 
-void TransmittanceContext::destroy() {
+TransmittanceContext::~TransmittanceContext() {
 	auto* device = parent_factory->parent_device;
 
 	lut.destroy();
@@ -845,26 +886,26 @@ void TransmittanceContext::destroy() {
 	renderpass.destroy();
 }
 
-void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceContext* _transmittance) {
+SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, TransmittanceContext* _transmittance) {
 
 	vk::Result result;
 	parent_factory = _pipeline_factory;
 	auto* const device = _pipeline_factory->parent_device;
 
 	tie(result, ubo) = Buffer::create("Skyview uniform buffer", device, closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256) + closest_multiple(sizeof(AtmosphereInfo), 256), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
-	ERROR_IF(failed(result), stl::fmt("Skyview UBO creation failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Skyview UBO creation failed with %s", to_cstr(result)));
 
 	transmittance = _transmittance;
 
 	tie(result, lut) = Image::create("Skyview LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, { 192, 108, 1 }, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
-	ERROR_IF(failed(result), stl::fmt("Skyview LUT creation failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Skyview LUT creation failed with %s", to_cstr(result)));
 
 	tie(result, lut_view) = ImageView::create(&lut, vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.levelCount = 1,
 		.layerCount = 1,
 	});
-	ERROR_IF(failed(result), stl::fmt("Skyview LUT view creation failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Skyview LUT view creation failed with %s", to_cstr(result)));
 
 	vk::AttachmentDescription attach_desc = {
 		.format = lut.format,
@@ -905,7 +946,7 @@ void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceConte
 		.dependencyCount = 1,
 		.pDependencies = &dependency,
 	});
-	ERROR_IF(failed(result), stl::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result)));
 
 	tie(result, pipeline) = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
@@ -934,7 +975,7 @@ void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceConte
 		.shader_files = { R"(res/shaders/sky_view_lut.vs.spv)", R"(res/shaders/sky_view_lut.fs.spv)" },
 		.name = "Skyview LUT Pipeline",
 	});
-	ERROR_IF(failed(result), stl::fmt("Skyview LUT Pipeline creation failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Skyview LUT Pipeline creation failed with %s", to_cstr(result)));
 
 	tie(result, framebuffer) = device->device.createFramebuffer({
 		.renderPass = renderpass.renderpass,
@@ -944,9 +985,9 @@ void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceConte
 		.height = lut.extent.height,
 		.layers = 1,
 	});
-	ERROR_IF(failed(result), stl::fmt("Skyview LUT Framebuffer creation failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Skyview LUT Framebuffer creation failed with %s", to_cstr(result)));
 
-	stl::vector<vk::DescriptorPoolSize> pool_sizes = {
+	std::vector<vk::DescriptorPoolSize> pool_sizes = {
 		{
 			.type = vk::DescriptorType::eUniformBuffer,
 			.descriptorCount = 3,
@@ -962,9 +1003,9 @@ void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceConte
 		.poolSizeCount = cast<u32>(pool_sizes.size()),
 		.pPoolSizes = pool_sizes.data(),
 	});
-	ERROR_IF(failed(result), stl::fmt("Skyview LUT Descriptor pool creation failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Skyview LUT Descriptor pool creation failed with %s", to_cstr(result)));
 
-	stl::vector<vk::DescriptorSet> descriptor_sets;
+	std::vector<vk::DescriptorSet> descriptor_sets;
 	const auto& layout = pipeline->layout->descriptor_set_layouts.front();
 	tie(result, descriptor_sets) = device->device.allocateDescriptorSets({
 		.descriptorPool = descriptor_pool,
@@ -972,7 +1013,7 @@ void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceConte
 		.pSetLayouts = &layout,
 	});
 	descriptor_set = descriptor_sets.front();
-	ERROR_IF(failed(result), stl::fmt("Skyview LUT Descriptor creation failed with %s", to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Skyview LUT Descriptor creation failed with %s", to_cstr(result)));
 
 	{
 		usize cam_offset, sun_offset, atmos_offset;
@@ -983,7 +1024,7 @@ void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceConte
 		offset += closest_multiple(sizeof(SunData), 256);
 		atmos_offset = offset;
 
-		stl::vector<vk::DescriptorBufferInfo> buf_info = {
+		std::vector<vk::DescriptorBufferInfo> buf_info = {
 			{
 				.buffer = ubo.buffer,
 				.offset = cam_offset,
@@ -1047,15 +1088,15 @@ void SkyviewContext::init(PipelineFactory* _pipeline_factory, TransmittanceConte
 	}
 }
 
-void SkyviewContext::update(Camera* _camera, SunData* _sun_data, AtmosphereInfo* _atmos) {
-	stl::vector<u8> buf_data(ubo.size);
+void SkyViewContext::update(Camera* _camera, SunData* _sun_data, AtmosphereInfo* _atmos) {
+	std::vector<u8> buf_data(ubo.size);
 	memcpy(buf_data.data(), _camera, sizeof(Camera));
 	memcpy(buf_data.data() + closest_multiple(sizeof(Camera), 256), _sun_data, sizeof(SunData));                                              // TODO Fix hardcode
 	memcpy(buf_data.data() + closest_multiple(sizeof(Camera), 256) + closest_multiple(sizeof(SunData), 256), _atmos, sizeof(AtmosphereInfo)); // TODO Fix hardcode
-	parent_factory->parent_device->update_data(&ubo, stl::span<u8>(buf_data.data(), buf_data.size()));
+	parent_factory->parent_device->update_data(&ubo, std::span<u8>(buf_data.data(), buf_data.size()));
 }
 
-void SkyviewContext::recalculate(vk::CommandBuffer _cmd) {
+void SkyViewContext::recalculate(vk::CommandBuffer _cmd) {
 
 	OPTICK_EVENT("Recalculate Skyview");
 	_cmd.beginDebugUtilsLabelEXT({
@@ -1084,7 +1125,7 @@ void SkyviewContext::recalculate(vk::CommandBuffer _cmd) {
 	_cmd.endDebugUtilsLabelEXT();
 }
 
-void SkyviewContext::destroy() {
+SkyViewContext::~SkyViewContext() {
 	auto* const device = parent_factory->parent_device;
 	device->device.destroyDescriptorPool(descriptor_pool);
 

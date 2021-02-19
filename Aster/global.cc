@@ -63,7 +63,7 @@ Time g_time = Time();
 //#endif
 //}
 
-stl::string stl::internal_fmt_(const char* fmt, ...) {
+std::string std::internal_fmt_(const char* fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
 

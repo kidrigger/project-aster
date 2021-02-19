@@ -95,10 +95,10 @@ public:
 	const vk::SpecializationInfo* pSpecializationInfo = {};
 };
 
-struct PipelineFactory;
+class PipelineFactory;
 
 struct InterfaceVariableInfo {
-	stl::string name;
+	std::string name;
 	u32 location;
 	vk::Format format;
 
@@ -118,7 +118,7 @@ struct DescriptorInfo {
 	u32 array_length = 1;
 	vk::ShaderStageFlags stages = {};
 	u32 block_size;
-	stl::string name;
+	std::string name;
 
 	b8 operator!=(const DescriptorInfo& _other) const {
 		return set != _other.set || binding != _other.binding || type != _other.type || array_length != _other.array_length || block_size != _other.block_size;
@@ -133,12 +133,12 @@ namespace std {
 }
 
 struct ShaderInfo {
-	stl::string name;
-	stl::vector<InterfaceVariableInfo> input_vars;
-	stl::vector<InterfaceVariableInfo> output_vars;
-	stl::map<stl::string, u32> descriptor_names;
-	stl::vector<DescriptorInfo> descriptors;
-	stl::vector<vk::PushConstantRange> push_ranges;
+	std::string name;
+	std::vector<InterfaceVariableInfo> input_vars;
+	std::vector<InterfaceVariableInfo> output_vars;
+	std::map<std::string, u32> descriptor_names;
+	std::vector<DescriptorInfo> descriptors;
+	std::vector<vk::PushConstantRange> push_ranges;
 };
 
 namespace std {
@@ -160,15 +160,15 @@ struct PipelineCreateInfo {
 	RenderPass renderpass;
 
 	struct InputAttribute {
-		stl::string_view attr_name;
+		std::string_view attr_name;
 		u32 binding = 0;
 		u32 offset = 0;
 		vk::Format format;
 	};
 
 	struct {
-		stl::vector<vk::VertexInputBindingDescription> bindings;
-		stl::vector<InputAttribute> attributes;
+		std::vector<vk::VertexInputBindingDescription> bindings;
+		std::vector<InputAttribute> attributes;
 	} vertex_input;
 
 	struct {
@@ -178,8 +178,8 @@ struct PipelineCreateInfo {
 
 	struct {
 		b32 enable_dynamic = true;
-		stl::vector<vk::Viewport> viewports{ 1 };
-		stl::vector<vk::Rect2D> scissors{ 1 };
+		std::vector<vk::Viewport> viewports{ 1 };
+		std::vector<vk::Rect2D> scissors{ 1 };
 	} viewport_state;
 
 	struct {
@@ -203,10 +203,10 @@ struct PipelineCreateInfo {
 		vk::SampleCountFlagBits sample_count = vk::SampleCountFlagBits::e1;
 	} multisample_state;
 
-	stl::vector<stl::string_view> shader_files;
+	std::vector<std::string_view> shader_files;
 
 	struct {
-		stl::vector<vk::PipelineColorBlendAttachmentState> attachments = {
+		std::vector<vk::PipelineColorBlendAttachmentState> attachments = {
 			{
 				.blendEnable = false,
 				.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
@@ -216,8 +216,8 @@ struct PipelineCreateInfo {
 		vec4 blend_constants = {};
 	} color_blend;
 
-	stl::vector<vk::DynamicState> dynamic_states;
-	stl::string name;
+	std::vector<vk::DynamicState> dynamic_states;
+	std::string name;
 };
 
 template <>
@@ -229,14 +229,14 @@ struct Layout {
 	usize hash;
 	ShaderInfo layout_info;
 	vk::PipelineLayout layout;
-	stl::vector<vk::DescriptorSetLayout> descriptor_set_layouts;
+	std::vector<vk::DescriptorSetLayout> descriptor_set_layouts;
 };
 
 struct Pipeline {
-	stl::vector<Shader*> shaders;
+	std::vector<Shader*> shaders;
 	Layout* layout;
 	vk::Pipeline pipeline;
-	stl::string name;
+	std::string name;
 	usize hash;
 
 	PipelineFactory* parent_factory;
@@ -244,41 +244,34 @@ struct Pipeline {
 	void destroy();
 };
 
-struct PipelineFactory {
-
+class PipelineFactory {
+public:
 	Device* parent_device;
 
-	void init(Device* _device) {
-		parent_device = _device;
-	}
+	explicit PipelineFactory(Device* _device) : parent_device{ _device } {}
 
-	void destroy() {
-		for (auto& [k, v] : pipeline_map) {
-			destroy_pipeline(&v.second);
-		}
-		for (auto& [k, v] : layout_map) {
-			WARN(stl::fmt("Pipeline layout %s not released by pipeline!", v.second.layout_info.name.c_str()));
-			destroy_pipeline_layout(&v.second);
-		}
-		for (auto& [k, v] : shader_map) {
-			WARN(stl::fmt("Shader Module %s not released by pipeline!", v.second.info.name.c_str()));
-			destroy_shader_module(&v.second);
-		}
-	}
+	PipelineFactory(const PipelineFactory& _other) = delete;
+	PipelineFactory(PipelineFactory&& _other) noexcept;
+	PipelineFactory& operator=(const PipelineFactory& _other) = delete;
+	PipelineFactory& operator=(PipelineFactory&& _other) noexcept;
 
-	vk::ResultValue<Shader*> create_shader_module(const stl::string_view& _name);
-	vk::ResultValue<stl::vector<Shader*>> create_shaders(const stl::vector<stl::string_view>& _names);
-	void destroy_shader_module(Shader* _shader);
-
-	vk::ResultValue<stl::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
-	vk::ResultValue<Layout*> create_pipeline_layout(const stl::vector<Shader*>& _shaders);
-	void destroy_pipeline_layout(Layout* _layout);
+	~PipelineFactory();
 
 	vk::ResultValue<Pipeline*> create_pipeline(const PipelineCreateInfo& _create_info);
 	void destroy_pipeline(Pipeline* _pipeline);
 
+private:
+
+	vk::ResultValue<Shader*> create_shader_module(const std::string_view& _name);
+	vk::ResultValue<std::vector<Shader*>> create_shaders(const std::vector<std::string_view>& _names);
+	void destroy_shader_module(Shader* _shader);
+
+	vk::ResultValue<std::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
+	vk::ResultValue<Layout*> create_pipeline_layout(const std::vector<Shader*>& _shaders);
+	void destroy_pipeline_layout(Layout* _layout);
+
 	// Fields
-	stl::unordered_map<usize, stl::pair<u32, Shader>> shader_map;
-	stl::unordered_map<usize, stl::pair<u32, Layout>> layout_map;
-	stl::unordered_map<usize, stl::pair<u32, Pipeline>> pipeline_map;
+	std::unordered_map<usize, std::pair<u32, Shader>> shader_map_;
+	std::unordered_map<usize, std::pair<u32, Layout>> layout_map_;
+	std::unordered_map<usize, std::pair<u32, Pipeline>> pipeline_map_;
 };

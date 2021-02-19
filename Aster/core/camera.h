@@ -121,7 +121,7 @@ struct CameraController {
 			yaw += cast<f32>(xoffset) * (flip_horizontal ? -1.0f : 1.0f);
 			pitch += cast<f32>(yoffset) * (flip_vertical ? -1.0f : 1.0f);
 
-			pitch = stl::clamp(pitch, -maxPitch, maxPitch);
+			pitch = std::clamp(pitch, -maxPitch, maxPitch);
 
 			if (yaw > PI) {
 				yaw -= TAU;

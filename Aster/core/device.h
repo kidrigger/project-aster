@@ -5,36 +5,42 @@
 #pragma once
 
 #include <global.h>
+#include <iterator>
 #include <core/context.h>
 #include <core/window.h>
 
 #include <span>
 #include <string_view>
+#include <unordered_set>
 
 struct Device;
 
 struct QueueFamilyIndices {
-	static constexpr u32 INVALID_VALUE = 0xFFFFFFFFu;
+	static constexpr u32 invalid_value = 0xFFFFFFFFu;
 
-	u32 graphics_idx{ INVALID_VALUE };
-	u32 present_idx{ INVALID_VALUE };
-	u32 compute_idx{ INVALID_VALUE };
-	u32 transfer_idx{ INVALID_VALUE };
+	u32 graphics_idx{ invalid_value };
+	u32 present_idx{ invalid_value };
+	u32 compute_idx{ invalid_value };
+	u32 transfer_idx{ invalid_value };
 
-	bool has_graphics() const {
-		return graphics_idx != INVALID_VALUE;
+	[[nodiscard]]
+	b8 has_graphics() const {
+		return graphics_idx != invalid_value;
 	}
 
-	bool has_present() const {
-		return present_idx != INVALID_VALUE;
+	[[nodiscard]]
+	b8 has_present() const {
+		return present_idx != invalid_value;
 	}
 
-	bool has_compute() const {
-		return compute_idx != INVALID_VALUE;
+	[[nodiscard]]
+	b8 has_compute() const {
+		return compute_idx != invalid_value;
 	}
 
-	bool has_transfer() const {
-		return transfer_idx != INVALID_VALUE;
+	[[nodiscard]]
+	b8 has_transfer() const {
+		return transfer_idx != invalid_value;
 	}
 };
 
@@ -52,9 +58,9 @@ struct Buffer {
 	vk::BufferUsageFlags usage;
 	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
 	usize size = 0;
-	stl::string name;
+	std::string name;
 
-	static vk::ResultValue<Buffer> create(const stl::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
+	static vk::ResultValue<Buffer> create(const std::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
 
 	void destroy();
 };
@@ -66,7 +72,7 @@ struct Image {
 	vk::ImageUsageFlags usage;
 	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
 	usize size = 0;
-	stl::string name;
+	std::string name;
 
 	vk::ImageType type;
 	vk::Format format;
@@ -74,7 +80,7 @@ struct Image {
 	u32 layer_count;
 	u32 mip_count;
 
-	static vk::ResultValue<Image> create(const stl::string& _name, Device* _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
+	static vk::ResultValue<Image> create(const std::string& _name, Device* _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
 
 	void destroy();
 };
@@ -85,7 +91,7 @@ struct ImageView {
 	vk::Format format;
 	vk::ImageViewType type;
 	vk::ImageSubresourceRange subresource_range;
-	stl::string name;
+	std::string name;
 
 	static vk::ResultValue<ImageView> create(Image* _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
 
@@ -96,15 +102,33 @@ template <typename T>
 struct SubmitTask;
 
 struct Device {
+	struct PhysicalDeviceInfo {
+		vk::PhysicalDevice device;
+		vk::PhysicalDeviceProperties properties;
+		vk::PhysicalDeviceFeatures features;
+		QueueFamilyIndices queue_family_indices;
 
-	void init(const stl::string& _name, Context* _context, Window* _window) noexcept;
-	void destroy() noexcept;
+		PhysicalDeviceInfo(const Window* _window, vk::PhysicalDevice _device) : device(_device) {
+			properties = device.getProperties();
+			features = device.getFeatures();
+			queue_family_indices = get_queue_families(_window, device);
+		}
 
-	i32 device_score(const Context* _context, const Window* _window, vk::PhysicalDevice _device) noexcept;
-	QueueFamilyIndices get_queue_families(const Window* window, vk::PhysicalDevice device);
+	private:
+		QueueFamilyIndices get_queue_families(const Window* _window, vk::PhysicalDevice _device);
+	};
+
+	Device(const std::string_view& _name, Context* _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features);
+
+	Device(const Device& _other) = delete;
+	Device(Device&& _other) noexcept;
+	Device& operator=(const Device& _other) = delete;
+	Device& operator=(Device&& _other) noexcept;
+
+	~Device();
 
 	template <typename T>
-	void set_object_name(const T& _obj, const stl::string_view& _name) const {
+	void set_object_name(const T& _obj, const std::string_view& _name) const {
 		auto result = device.setDebugUtilsObjectNameEXT({
 			.objectType = _obj.objectType,
 			.objectHandle = get_vk_handle(_obj),
@@ -124,8 +148,8 @@ struct Device {
 		return vk::ResultValue<vk::CommandBuffer>(result, cmd);
 	}
 
-	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const stl::span<u8>& _data);
-	void update_data(Buffer* _host_buffer, const stl::span<u8>& _data);
+	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const std::span<u8>& _data);
+	void update_data(Buffer* _host_buffer, const std::span<u8>& _data);
 
 	// fields
 	Context* parent_context;
@@ -140,10 +164,10 @@ struct Device {
 	vk::CommandPool transfer_cmd_pool;
 	vk::CommandPool graphics_cmd_pool;
 
-	stl::string name;
+	std::string name;
 
 private:
-	void set_name(const stl::string& _name);
+	void set_name(const std::string& _name);
 };
 
 template <typename T>
@@ -151,13 +175,13 @@ struct SubmitTask {
 	vk::Fence fence;
 	const Device* device;
 	T payload;
-	stl::vector<vk::CommandBuffer> cmd;
+	std::vector<vk::CommandBuffer> cmd;
 	vk::CommandPool pool;
 
-	vk::Result submit(Device* _device, T& _payload, vk::Queue _queue, vk::CommandPool _pool, stl::vector<vk::CommandBuffer> _cmd, stl::vector<vk::Semaphore> _wait_on = {}, stl::vector<vk::Semaphore> _signal_to = {}) {
+	vk::Result submit(Device* _device, T& _payload, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {}, std::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
-		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstr(result)));
+		ERROR_IF(failed(result), std::fmt("Fence creation failed with %s", to_cstr(result)));
 		fence = _fence;
 		payload = _payload;
 		cmd = _cmd;
@@ -182,7 +206,7 @@ struct SubmitTask {
 
 	[[nodiscard]] vk::Result destroy() {
 		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
-		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstr(result)));
+		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result)));
 		payload.destroy();
 		device->device.destroyFence(fence);
 		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
@@ -190,19 +214,18 @@ struct SubmitTask {
 	}
 };
 
-
 template <>
 struct SubmitTask<void> {
 	vk::Fence fence;
 	const Device* device;
-	stl::vector<vk::CommandBuffer> cmd;
+	std::vector<vk::CommandBuffer> cmd;
 	vk::CommandPool pool;
 
-	[[nodiscard]] vk::Result submit(Device* _device, vk::Queue _queue, vk::CommandPool _pool, stl::vector<vk::CommandBuffer> _cmd, stl::vector<vk::Semaphore> _wait_on = {},
-	                                const vk::PipelineStageFlags& _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, stl::vector<vk::Semaphore> _signal_to = {}) {
+	[[nodiscard]] vk::Result submit(Device* _device, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {},
+	                                const vk::PipelineStageFlags& _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, std::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
-		ERROR_IF(failed(result), stl::fmt("Fence creation failed with %s", to_cstr(result)));
+		ERROR_IF(failed(result), std::fmt("Fence creation failed with %s", to_cstr(result)));
 		fence = _fence;
 		cmd = _cmd;
 		pool = _pool;
@@ -225,9 +248,73 @@ struct SubmitTask<void> {
 
 	[[nodiscard]] vk::Result destroy() {
 		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
-		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstr(result)));
+		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result)));
 		device->device.destroyFence(fence);
 		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
 		return result;
 	}
+};
+
+class DeviceSelector {
+public:
+	using PhysicalDeviceInfo = Device::PhysicalDeviceInfo;
+	using DeviceSet = std::vector<PhysicalDeviceInfo>;
+
+	class DeviceSelectorIntermediate {
+		std::span<PhysicalDeviceInfo> device_set_;
+	public:
+
+		explicit DeviceSelectorIntermediate(const std::span<PhysicalDeviceInfo>& _device_set) : device_set_{ _device_set } {}
+
+		template <typename TLambda>
+		DeviceSelectorIntermediate select_on(TLambda&& _predicate) {
+			auto part = std::partition(device_set_.begin(), device_set_.end(), _predicate);
+			return DeviceSelectorIntermediate{ std::span{ device_set_.begin(), part } };
+		}
+
+		template <typename TLambda>
+		DeviceSelectorIntermediate sort_by(const TLambda& _sorter) {
+			std::ranges::sort(device_set_, [key = _sorter](PhysicalDeviceInfo& _a, PhysicalDeviceInfo& _b) {
+				return key(_a) > key(_b);
+			});
+			return DeviceSelectorIntermediate{ device_set_ };
+		}
+
+		PhysicalDeviceInfo get(const u32 _idx = 0) {
+			ERROR_IF(_idx >= device_set_.size(), "Out of range");
+			return device_set_[_idx];
+		}
+	};
+
+	DeviceSelector(const Context* _context, const Window* _window) {
+		auto [result, available_physical_devices] = _context->instance.enumeratePhysicalDevices();
+		ERROR_IF(failed(result), "Failed fetching devices with "s + to_string(result)) THEN_CRASH(result) ELSE_IF_ERROR(available_physical_devices.empty(), "No valid devices found") THEN_CRASH(Error::eNoDevices);
+
+		std::ranges::transform(available_physical_devices, std::back_inserter(device_set_),
+			[window = _window](const vk::PhysicalDevice _dev) {
+				return PhysicalDeviceInfo{ window, _dev };
+			});
+	}
+
+	template <typename TLambda>
+	DeviceSelectorIntermediate select_on(TLambda&& _predicate) {
+		auto part = std::partition(device_set_.begin(), device_set_.end(), _predicate);
+		return DeviceSelectorIntermediate{ std::span{ device_set_.begin(), part } };
+	}
+
+	template <typename TLambda>
+	DeviceSelectorIntermediate sort_by(const TLambda& _sorter) {
+		std::ranges::sort(device_set_, [key = _sorter](PhysicalDeviceInfo& _a, PhysicalDeviceInfo& _b) {
+			return key(_a) < key(_b);
+		});
+		return DeviceSelectorIntermediate{ device_set_ };
+	}
+
+	PhysicalDeviceInfo get(const u32 _idx = 0) {
+		ERROR_IF(_idx >= device_set_.size(), "Out of range");
+		return device_set_[_idx];
+	}
+
+private:
+	DeviceSet device_set_;
 };

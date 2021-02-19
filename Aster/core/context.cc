@@ -27,7 +27,7 @@ VKAPI_ATTR b32 VKAPI_CALL Context::debug_callback(VkDebugUtilsMessageSeverityFla
 	return false;
 }
 
-void Context::init(const stl::string& _app_name, const Version& _app_version) noexcept {
+void Context::init(const std::string_view& _app_name, const Version& _app_version) {
 	vk::Result result;
 
 	INFO_IF(enable_validation_layers, "Validation Layers enabled");
@@ -56,7 +56,7 @@ void Context::init(const stl::string& _app_name, const Version& _app_version) no
 	const char** glfw_extensions = nullptr;
 
 	glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-	stl::vector<const char*> vulkan_extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
+	std::vector<const char*> vulkan_extensions(glfw_extensions, glfw_extensions + glfw_extension_count);
 	if (enable_validation_layers) {
 		vulkan_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
@@ -83,10 +83,12 @@ void Context::init(const stl::string& _app_name, const Version& _app_version) no
 	}
 }
 
-void Context::destroy() noexcept {
-	if (enable_validation_layers) {
-		instance.destroyDebugUtilsMessengerEXT(debug_messenger);
+Context::~Context() {
+	if (instance) {
+		if (enable_validation_layers && debug_messenger) {
+			instance.destroyDebugUtilsMessengerEXT(debug_messenger);
+		}
+		instance.destroy();
+		INFO("Context destroyed");
 	}
-	instance.destroy();
-	INFO("Context destroyed");
 }

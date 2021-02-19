@@ -14,13 +14,13 @@
 namespace ImGui {
 	vk::DescriptorPool descriptor_pool;
 	vk::RenderPass renderpass;
-	stl::vector<vk::Framebuffer> framebuffers;
+	std::vector<vk::Framebuffer> framebuffers;
 
 	Swapchain* current_swapchain;
 
 	void vulkan_assert(VkResult _res) {
 		auto result = cast<vk::Result>(_res);
-		ERROR_IF(failed(result), stl::fmt("Assert failed with %s", to_cstr(result))) THEN_CRASH(result);
+		ERROR_IF(failed(result), std::fmt("Assert failed with %s", to_cstr(result))) THEN_CRASH(result);
 	}
 
 	void Init(Swapchain* _swapchain) {
@@ -30,7 +30,7 @@ namespace ImGui {
 
 		vk::Result result;
 
-		stl::vector<vk::DescriptorPoolSize> pool_sizes = {
+		std::vector<vk::DescriptorPoolSize> pool_sizes = {
 			{ vk::DescriptorType::eSampler, 1000 },
 			{ vk::DescriptorType::eCombinedImageSampler, 1000 },
 			{ vk::DescriptorType::eSampledImage, 1000 },
@@ -49,7 +49,7 @@ namespace ImGui {
 			.poolSizeCount = cast<u32>(pool_sizes.size()),
 			.pPoolSizes = pool_sizes.data(),
 		});
-		ERROR_IF(failed(result), stl::fmt("Descriptor pool creation failed with %s", result)) THEN_CRASH(result);
+		ERROR_IF(failed(result), std::fmt("Descriptor pool creation failed with %s", result)) THEN_CRASH(result);
 		device_->set_object_name(descriptor_pool, "Imgui descriptor pool"s);
 
 
@@ -92,7 +92,7 @@ namespace ImGui {
 			.dependencyCount = 1,
 			.pDependencies = &dependency
 		});
-		ERROR_IF(failed(result), stl::fmt("Renderpass creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("UI pass Created");
+		ERROR_IF(failed(result), std::fmt("Renderpass creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("UI pass Created");
 		device_->set_object_name(renderpass, "UI pass");
 
 		IMGUI_CHECKVERSION();
@@ -128,11 +128,11 @@ namespace ImGui {
 		ImGui_ImplVulkan_CreateFontsTexture(cmd);
 
 		result = cmd.end();
-		ERROR_IF(failed(result), stl::fmt("Cmd buffer end failed with %s", to_cstr(result))) THEN_CRASH(result);
+		ERROR_IF(failed(result), std::fmt("Cmd buffer end failed with %s", to_cstr(result))) THEN_CRASH(result);
 
 		auto task = SubmitTask<void>();
 		result = task.submit(device_, device_->queues.transfer, device_->transfer_cmd_pool, { cmd });
-		ERROR_IF(failed(result), stl::fmt("Fonts could not be loaded to GPU with %s", to_cstr(result))) THEN_CRASH(result);
+		ERROR_IF(failed(result), std::fmt("Fonts could not be loaded to GPU with %s", to_cstr(result))) THEN_CRASH(result);
 
 		framebuffers.reserve(_swapchain->image_count);
 		for (auto& iv : _swapchain->image_views) {
@@ -144,11 +144,11 @@ namespace ImGui {
 				.height = _swapchain->extent.height,
 				.layers = 1,
 			});
-			ERROR_IF(failed(result), stl::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			ERROR_IF(failed(result), std::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
 		}
 
 		result = task.wait_and_destroy();
-		ERROR_IF(failed(result), stl::fmt("Fence wait failed with %s", to_cstr(result))) THEN_CRASH(result);
+		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result))) THEN_CRASH(result);
 	}
 
 	void Destroy() {
@@ -180,7 +180,7 @@ namespace ImGui {
 				.height = current_swapchain->extent.height,
 				.layers = 1,
 			});
-			ERROR_IF(failed(result), stl::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			ERROR_IF(failed(result), std::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
 		}
 	}
 

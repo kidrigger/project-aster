@@ -4,13 +4,11 @@
 /*=========================================*/
 #include "swapchain.h"
 
-void Swapchain::init(const stl::string& _name, Window* _window, Device* _device) noexcept {
-	parent_window = _window;
-	parent_device = _device;
-	name = _name;
-
-	VERBOSE("Creating Swapchain formats");
-	support.init(&_window->surface, &_device->physical_device);
+Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _device)
+	: parent_window{ _window }
+	, parent_device{ _device }
+	, support{ &_window->surface, &_device->physical_device }
+	, name{ _name } {
 
 	VERBOSE("Selecting Surface formats");
 
@@ -38,13 +36,13 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 	if (support.capabilities.currentExtent.width != max_value<u32>) {
 		extent = support.capabilities.currentExtent;
 	} else {
-		extent.width = stl::clamp(_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
-		extent.height = stl::clamp(_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+		extent.width = std::clamp(_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+		extent.height = std::clamp(_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
 	}
 
 	image_count = support.capabilities.minImageCount + 1;
 	if (support.capabilities.maxImageCount > 0) {
-		image_count = stl::min(image_count, support.capabilities.maxImageCount);
+		image_count = std::min(image_count, support.capabilities.maxImageCount);
 	}
 
 	requires_ownership_transfer = (_device->queue_families.graphics_idx != _device->queue_families.present_idx); // needs transfer if not the same queue
@@ -67,16 +65,16 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 		.clipped = true,
 		.oldSwapchain = vk::SwapchainKHR(),
 	});
-	ERROR_IF(failed(result), stl::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstr(result))) ELSE_INFO(stl::fmt("Swapchain '%s' created!", name.data()));
+	ERROR_IF(failed(result), std::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstr(result))) ELSE_INFO(std::fmt("Swapchain '%s' created!", name.data()));
 
 	_device->set_object_name(swapchain, name);
 
 	tie(result, images) = _device->device.getSwapchainImagesKHR(swapchain);
-	ERROR_IF(failed(result), stl::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), std::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
 
 	u32 i_ = 0;
 	for (auto& image_ : images) {
-		_device->set_object_name(image_, stl::fmt("%s Image %u", name.data(), i_++));
+		_device->set_object_name(image_, std::fmt("%s Image %u", name.data(), i_++));
 	}
 
 	i_ = 0;
@@ -94,21 +92,35 @@ void Swapchain::init(const stl::string& _name, Window* _window, Device* _device)
 				.layerCount = 1,
 			},
 		});
-		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
+		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
 	}
 
 	i_ = 0;
 	for (auto& image_ : images) {
-		_device->set_object_name(image_, stl::fmt("%s View %u", name.data(), i_++));
+		_device->set_object_name(image_, std::fmt("%s View %u", name.data(), i_++));
 	}
 
-	INFO(stl::fmt("Number of swapchain images in %s %d", name.data(), image_count));
+	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
 }
 
-void Swapchain::recreate() noexcept {
+Swapchain::Swapchain(Swapchain&& _other) noexcept: parent_window{ _other.parent_window }
+                                                 , parent_device{ _other.parent_device }
+                                                 , swapchain{ std::exchange(_other.swapchain, nullptr) }
+                                                 , support{ std::move(_other.support) }
+                                                 , format{ _other.format }
+                                                 , color_space{ _other.color_space }
+                                                 , present_mode{ _other.present_mode }
+                                                 , extent{ _other.extent }
+                                                 , requires_ownership_transfer{ _other.requires_ownership_transfer }
+                                                 , name{ std::move(_other.name) }
+                                                 , images{ std::move(_other.images) }
+                                                 , image_views{ std::move(_other.image_views) }
+                                                 , image_count{ _other.image_count } {}
+
+void Swapchain::recreate() {
 
 	VERBOSE("Recreating Swapchain formats");
-	support.init(&parent_window->surface, &parent_device->physical_device);
+	support = SurfaceSupportDetails{ &parent_window->surface, &parent_device->physical_device };
 
 	VERBOSE("Selecting Surface formats");
 
@@ -136,13 +148,13 @@ void Swapchain::recreate() noexcept {
 	if (support.capabilities.currentExtent.width != max_value<u32>) {
 		extent = support.capabilities.currentExtent;
 	} else {
-		extent.width = stl::clamp(parent_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
-		extent.height = stl::clamp(parent_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+		extent.width = std::clamp(parent_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
+		extent.height = std::clamp(parent_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
 	}
 
 	image_count = support.capabilities.minImageCount + 1;
 	if (support.capabilities.maxImageCount > 0) {
-		image_count = stl::min(image_count, support.capabilities.maxImageCount);
+		image_count = std::min(image_count, support.capabilities.maxImageCount);
 	}
 
 	requires_ownership_transfer = (parent_device->queue_families.graphics_idx != parent_device->queue_families.present_idx); // needs transfer if not the same queue
@@ -165,21 +177,21 @@ void Swapchain::recreate() noexcept {
 		.clipped = true,
 		.oldSwapchain = swapchain
 	});
-	ERROR_IF(failed(result), stl::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstr(result))) ELSE_INFO(stl::fmt("Swapchain '%s' recreated!", name.data()));
+	ERROR_IF(failed(result), std::fmt("Swapchain '%s' creation failed with %s", name.data(), to_cstr(result))) ELSE_INFO(std::fmt("Swapchain '%s' recreated!", name.data()));
 
 	parent_device->set_object_name(swapchain, name);
 
 	tie(result, images) = parent_device->device.getSwapchainImagesKHR(swapchain);
-	ERROR_IF(failed(result), stl::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), std::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
 
 	u32 i_ = 0;
 	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, stl::fmt("%s Image %u", name.data(), i_++));
+		parent_device->set_object_name(image_, std::fmt("%s Image %u", name.data(), i_++));
 	}
 
 	// TODO: See if this needs to be / can be async
 	result = parent_device->device.waitIdle();
-	ERROR_IF(failed(result), stl::fmt("Device idling on %s failed with %s", parent_device->name.data(), to_cstr(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), std::fmt("Device idling on %s failed with %s", parent_device->name.data(), to_cstr(result))) THEN_CRASH(result);
 	for (auto& image_view : image_views) {
 		parent_device->device.destroyImageView(image_view);
 	}
@@ -200,21 +212,42 @@ void Swapchain::recreate() noexcept {
 				.layerCount = 1,
 			},
 		});
-		ERROR_IF(failed(result), stl::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(stl::fmt("Image view %u created", i_++));
+		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
 	}
 
 	i_ = 0;
 	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, stl::fmt("%s View %u", name.data(), i_++));
+		parent_device->set_object_name(image_, std::fmt("%s View %u", name.data(), i_++));
 	}
 
-	INFO(stl::fmt("Number of swapchain images in %s %d", name.data(), image_count));
+	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
 }
 
-void Swapchain::destroy() noexcept {
+Swapchain& Swapchain::operator=(Swapchain&& _other) noexcept {
+	if (this == &_other) return *this;
+	parent_window = _other.parent_window;
+	parent_device = _other.parent_device;
+	swapchain = std::exchange(_other.swapchain, nullptr);
+	support = std::move(_other.support);
+	format = _other.format;
+	color_space = _other.color_space;
+	present_mode = _other.present_mode;
+	extent = _other.extent;
+	requires_ownership_transfer = _other.requires_ownership_transfer;
+	name = std::move(_other.name);
+	images = std::move(_other.images);
+	image_views = std::move(_other.image_views);
+	image_count = _other.image_count;
+	return *this;
+}
+
+Swapchain::~Swapchain() {
 	for (auto& image_view : image_views) {
 		parent_device->device.destroyImageView(image_view);
 	}
-	parent_device->device.destroySwapchainKHR(swapchain);
-	INFO(stl::fmt("Swapchain '%s' destroyed", name.data()));
+
+	if (swapchain) {
+		parent_device->device.destroySwapchainKHR(swapchain);
+	}
+	INFO(std::fmt("Swapchain '%s' destroyed", name.data()));
 }

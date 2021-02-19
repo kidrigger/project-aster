@@ -7,11 +7,11 @@
 #include <core/context.h>
 #include <core/glfw_context.h>
 
-void Window::init(const stl::string& _title, const Context* _context, u32 _width, u32 _height, b8 _full_screen) noexcept {
-	extent = vk::Extent2D{ .width = _width, .height = _height };
-	name = _title;
-	full_screen = _full_screen;
-	parent_context = _context;
+Window::Window(const std::string_view& _title, const Context* _context, vk::Extent2D _extent, b8 _full_screen)
+	: parent_context{ _context }
+	, extent{ _extent }
+	, name{ _title }
+	, full_screen{ _full_screen } {
 
 	monitor = glfwGetPrimaryMonitor();
 
@@ -22,7 +22,7 @@ void Window::init(const stl::string& _title, const Context* _context, u32 _width
 	glfwWindowHint(GLFW_CENTER_CURSOR, GLFW_TRUE);
 
 	window = glfwCreateWindow(extent.width, extent.height, name.data(), full_screen ? monitor : nullptr, nullptr);
-	ERROR_IF(window == nullptr, "Window creation failed") ELSE_INFO(stl::fmt("Window '%s' created with resolution '%dx%d'", name.data(), extent.width, extent.height));
+	ERROR_IF(window == nullptr, "Window creation failed") ELSE_INFO(std::fmt("Window '%s' created with resolution '%dx%d'", name.data(), extent.width, extent.height));
 	if (window == nullptr) {
 		auto code = GlfwContext::post_error();
 		glfwTerminate();
@@ -40,9 +40,31 @@ void Window::init(const stl::string& _title, const Context* _context, u32 _width
 	surface = vk::SurfaceKHR(surface_);
 }
 
-void Window::destroy() noexcept {
-	parent_context->instance.destroy(surface);
-	INFO("Surface Destroyed");
+Window::Window(Window&& _other) noexcept: parent_context{ _other.parent_context }
+                                        , window{ std::exchange(_other.window, nullptr) }
+                                        , monitor{ _other.monitor }
+                                        , surface{ std::exchange(_other.surface, nullptr) }
+                                        , extent{ _other.extent }
+                                        , name{ std::move(_other.name) }
+                                        , full_screen{ _other.full_screen } {}
+
+Window& Window::operator=(Window&& _other) noexcept {
+	if (this == &_other) return *this;
+	parent_context = _other.parent_context;
+	window = _other.window;
+	monitor = _other.monitor;
+	surface = std::exchange(_other.surface, nullptr);
+	extent = _other.extent;
+	name = std::move(_other.name);
+	full_screen = _other.full_screen;
+	return *this;
+}
+
+Window::~Window() {
+	if (parent_context && surface) {
+		parent_context->instance.destroy(surface);
+		INFO("Surface Destroyed");
+	}
 
 	if (window != nullptr) {
 		glfwDestroyWindow(window);

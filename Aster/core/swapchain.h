@@ -16,7 +16,7 @@ struct SurfaceSupportDetails {
 	std::vector<vk::SurfaceFormatKHR> formats;
 	std::vector<vk::PresentModeKHR> present_modes;
 
-	void init(const vk::SurfaceKHR* _surface, const vk::PhysicalDevice* _device) noexcept {
+	SurfaceSupportDetails(const vk::SurfaceKHR* _surface, const vk::PhysicalDevice* _device) {
 		vk::Result result;
 		tie(result, capabilities) = _device->getSurfaceCapabilitiesKHR(*_surface);
 		ERROR_IF(failed(result), "Fetching surface capabilities failed with "s + to_string(result)) THEN_CRASH(result);
@@ -41,19 +41,24 @@ struct Swapchain {
 	vk::Extent2D extent;
 
 	bool requires_ownership_transfer;
-	stl::string name;
+	std::string name;
 
 	std::vector<vk::Image> images;
 	std::vector<vk::ImageView> image_views;
 	u32 image_count{ 0 };
 
-	void init(const stl::string& _name, Window* _window, Device* _device) noexcept;
+	Swapchain(const std::string_view& _name, Window* _window, Device* _device);
 
-	void recreate() noexcept;
+	Swapchain(const Swapchain& _other) = delete;
+	Swapchain(Swapchain&& _other) noexcept;
+	Swapchain& operator=(const Swapchain& _other) = delete;
+	Swapchain& operator=(Swapchain&& _other) noexcept;
 
-	void destroy() noexcept;
+	~Swapchain();
 
-	void set_name(const stl::string& _name) noexcept {
+	void recreate();
+
+	void set_name(const std::string& _name) {
 		name = _name;
 		parent_device->set_object_name(swapchain, name);
 	}

@@ -40,51 +40,51 @@ inline b8 spv_failed(SpvReflectResult _result) {
 	return _result != SPV_REFLECT_RESULT_SUCCESS;
 }
 
-vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const stl::string_view& _name) {
+vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string_view& _name) {
 
 	usize hash_key = hash_any(_name);
-	if (shader_map.contains(hash_key)) {
-		auto& entry = shader_map[hash_key];
+	if (shader_map_.contains(hash_key)) {
+		auto& entry = shader_map_[hash_key];
 		entry.first++;
-		DEBUG(stl::fmt("Using cached shader %s", _name.data()));
+		DEBUG(std::fmt("Using cached shader %s", _name.data()));
 		return vk::ResultValue<Shader*>(vk::Result::eSuccess, &entry.second);
 	}
-	DEBUG(stl::fmt("Creating new shader %s", _name.data()));
+	DEBUG(std::fmt("Creating new shader %s", _name.data()));
 
 	b8 found = file_exists(_name);
-	ERROR_IF(!found, stl::fmt("Shader '%s' not found.", _name.data()));
+	ERROR_IF(!found, std::fmt("Shader '%s' not found.", _name.data()));
 	if (!found) {
 		return vk::ResultValue<Shader*>(vk::Result::eIncomplete, nullptr);
 	}
 
 	auto code = load_binary32_file(_name);
 	b8 empty = code.empty();
-	ERROR_IF(empty, stl::fmt("Shader '%s' is empty.", _name.data()));
+	ERROR_IF(empty, std::fmt("Shader '%s' is empty.", _name.data()));
 	if (empty) {
 		return vk::ResultValue<Shader*>(vk::Result::eIncomplete, nullptr);
 	}
 
 	auto spv_ext_idx = _name.find_last_of('.');
 	auto spv_ext = _name.substr(spv_ext_idx);
-	WARN_IF(spv_ext != ".spv"sv, stl::fmt("Shader '%s' has extension '%s' instead of '.spv'", _name.data(), spv_ext.data()));
+	WARN_IF(spv_ext != ".spv"sv, std::fmt("Shader '%s' has extension '%s' instead of '.spv'", _name.data(), spv_ext.data()));
 	auto shader_ext_idx = _name.substr(0, spv_ext_idx).find_last_of('.');
 	auto shader_ext = _name.substr(shader_ext_idx, spv_ext_idx - shader_ext_idx);
 
 	spv_reflect::ShaderModule reflector(code);
-	ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
 	u32 set_count;
 	reflector.EnumerateDescriptorSets(&set_count, nullptr);
-	ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
-	stl::map<stl::string, u32> descriptor_names;
-	stl::vector<DescriptorInfo> descriptors;
+	std::map<std::string, u32> descriptor_names;
+	std::vector<DescriptorInfo> descriptors;
 	if (set_count > 0) {
-		stl::vector<SpvReflectDescriptorSet*> sets(set_count, nullptr);
+		std::vector<SpvReflectDescriptorSet*> sets(set_count, nullptr);
 		reflector.EnumerateDescriptorSets(&set_count, sets.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
-		stl::map<stl::pair<u32, u32>, DescriptorInfo> uniforms;
+		std::map<std::pair<u32, u32>, DescriptorInfo> uniforms;
 		for (auto set_ : sets) {
 			for (u32 binding_idx = 0; binding_idx < set_->binding_count; ++binding_idx) {
 				SpvReflectDescriptorBinding* binding_ = set_->bindings[binding_idx];
@@ -94,12 +94,12 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const stl::string
 					length *= binding_->array.dims[i_dim];
 				}
 
-				auto key_ = stl::make_pair(set_->set, binding_->binding);
+				auto key_ = std::make_pair(set_->set, binding_->binding);
 				if (uniforms.contains(key_)) {
 					b8 is_combined_sampler = false;
 					is_combined_sampler |= (uniforms[key_].type == vk::DescriptorType::eSampledImage && cast<vk::DescriptorType>(binding_->descriptor_type) == vk::DescriptorType::eSampler);
 					is_combined_sampler |= (uniforms[key_].type == vk::DescriptorType::eSampler && cast<vk::DescriptorType>(binding_->descriptor_type) == vk::DescriptorType::eSampledImage);
-					WARN_IF(!is_combined_sampler, stl::fmt("Two bindings at (%u, %u) that are not a combined image sampler", set_->set, binding_->binding));
+					WARN_IF(!is_combined_sampler, std::fmt("Two bindings at (%u, %u) that are not a combined image sampler", set_->set, binding_->binding));
 
 					uniforms[key_].type = cast<vk::DescriptorType>(vk::DescriptorType::eCombinedImageSampler);
 				} else {
@@ -119,7 +119,7 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const stl::string
 		u32 idx = 0;
 		descriptors.reserve(uniforms.size());
 		for (auto& [k, u] : uniforms) {
-			VERBOSE(stl::fmt("%d, %d\ntype=%s\narray_length=%u\nstages=%s\nblock_size=%u\nname=%s", u.set, u.binding, to_string(u.type).data(), u.array_length, to_string(u.stages).data(), u.block_size, u.name.data()));
+			VERBOSE(std::fmt("%d, %d\ntype=%s\narray_length=%u\nstages=%s\nblock_size=%u\nname=%s", u.set, u.binding, to_string(u.type).data(), u.array_length, to_string(u.stages).data(), u.block_size, u.name.data()));
 			descriptors.push_back(u);
 			descriptor_names[u.name] = idx++;
 		}
@@ -127,65 +127,65 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const stl::string
 
 	vk::ShaderStageFlagBits shader_stage = cast<vk::ShaderStageFlagBits>(reflector.GetShaderStage());
 
-	stl::vector<InterfaceVariableInfo> input_variables;
+	std::vector<InterfaceVariableInfo> input_variables;
 	u32 input_variable_count;
 	reflector.EnumerateInputVariables(&input_variable_count, nullptr);
-	ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
 	if (input_variable_count) {
-		stl::vector<SpvReflectInterfaceVariable*> input_vars(input_variable_count);
+		std::vector<SpvReflectInterfaceVariable*> input_vars(input_variable_count);
 		reflector.EnumerateInputVariables(&input_variable_count, input_vars.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
 		for (auto& iv : input_vars) {
 			if (!iv->name) continue;
-			VERBOSE(stl::fmt("IN %s %d %s", iv->name, iv->location, to_string(cast<vk::Format>(iv->format)).c_str()));
-			auto name = stl::string_view(iv->name);
+			VERBOSE(std::fmt("IN %s %d %s", iv->name, iv->location, to_string(cast<vk::Format>(iv->format)).c_str()));
+			auto name = std::string_view(iv->name);
 			input_variables.emplace_back() = {
-				.name = stl::string(name.substr(name.find_last_of('.'))),
+				.name = std::string(name.substr(name.find_last_of('.'))),
 				.location = iv->location,
 				.format = cast<vk::Format>(iv->format),
 			};
 		}
 	}
-	stl::ranges::sort(input_variables, [](InterfaceVariableInfo& a, InterfaceVariableInfo& b) {
+	std::ranges::sort(input_variables, [](InterfaceVariableInfo& a, InterfaceVariableInfo& b) {
 		return a.name > b.name;
 	});
 
-	stl::vector<InterfaceVariableInfo> output_variables;
+	std::vector<InterfaceVariableInfo> output_variables;
 	u32 output_variable_count;
 	reflector.EnumerateOutputVariables(&output_variable_count, nullptr);
-	ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
 	if (output_variable_count) {
-		stl::vector<SpvReflectInterfaceVariable*> output_vars(output_variable_count);
+		std::vector<SpvReflectInterfaceVariable*> output_vars(output_variable_count);
 		reflector.EnumerateOutputVariables(&output_variable_count, output_vars.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
 		for (auto& iv : output_vars) {
 			if (!iv->name) continue;
-			VERBOSE(stl::fmt("OUT %s %d %s", iv->name, iv->location, to_string(cast<vk::Format>(iv->format)).c_str()));
-			auto name = stl::string_view(iv->name);
+			VERBOSE(std::fmt("OUT %s %d %s", iv->name, iv->location, to_string(cast<vk::Format>(iv->format)).c_str()));
+			auto name = std::string_view(iv->name);
 			output_variables.emplace_back() = {
-				.name = stl::string(name.substr(name.find_last_of('.'))),
+				.name = std::string(name.substr(name.find_last_of('.'))),
 				.location = iv->location,
 				.format = cast<vk::Format>(iv->format),
 			};
 		}
 	}
-	stl::ranges::sort(output_variables, [](InterfaceVariableInfo& a, InterfaceVariableInfo& b) {
+	std::ranges::sort(output_variables, [](InterfaceVariableInfo& a, InterfaceVariableInfo& b) {
 		return a.name > b.name;
 	});
 
-	stl::vector<vk::PushConstantRange> push_constant_ranges;
+	std::vector<vk::PushConstantRange> push_constant_ranges;
 	u32 push_constant_count = 0;
 	reflector.EnumeratePushConstantBlocks(&push_constant_count, nullptr);
 
 	// Push const is not perfect
 	if (push_constant_count) {
-		stl::vector<SpvReflectBlockVariable*> push_constants(push_constant_count);
+		std::vector<SpvReflectBlockVariable*> push_constants(push_constant_count);
 		reflector.EnumeratePushConstantBlocks(&push_constant_count, push_constants.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), stl::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
 		for (auto pc_ : push_constants) {
 			push_constant_ranges.emplace_back() = {
@@ -206,7 +206,7 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const stl::string
 	}
 
 	ShaderInfo shader_info = {
-		.name = stl::string(_name),
+		.name = std::string(_name),
 		.input_vars = move(input_variables),
 		.output_vars = move(output_variables),
 		.descriptor_names = move(descriptor_names),
@@ -214,7 +214,7 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const stl::string
 		.push_ranges = move(push_constant_ranges),
 	};
 
-	auto& val = shader_map[hash_key] = {
+	auto& val = shader_map_[hash_key] = {
 		1u,
 		{
 			.stage = {
@@ -233,23 +233,23 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const stl::string
 
 void PipelineFactory::destroy_shader_module(Shader* _shader) {
 	usize hash_key = hash_any(_shader->info.name);
-	ERROR_IF(!shader_map.contains(hash_key), stl::fmt("Destroy called on unexisting shader %s", _shader->info.name.c_str()));
+	ERROR_IF(!shader_map_.contains(hash_key), std::fmt("Destroy called on unexisting shader %s", _shader->info.name.c_str()));
 
-	if (0 == --shader_map[hash_key].first) {
-		DEBUG(stl::fmt("Deleting cached shader %s", _shader->info.name.data()));
+	if (0 == --shader_map_[hash_key].first) {
+		DEBUG(std::fmt("Deleting cached shader %s", _shader->info.name.data()));
 		parent_device->device.destroyShaderModule(_shader->stage.shaderModule);
-		shader_map.erase(hash_key);
+		shader_map_.erase(hash_key);
 	}
 }
 
-vk::ResultValue<stl::vector<Shader*>> PipelineFactory::create_shaders(const stl::vector<stl::string_view>& _names) {
-	stl::vector<Shader*> shaders;
+vk::ResultValue<std::vector<Shader*>> PipelineFactory::create_shaders(const std::vector<std::string_view>& _names) {
+	std::vector<Shader*> shaders;
 	shaders.reserve(_names.size());
 
 	for (auto& name : _names) {
 		vk::Result res;
 		tie(res, shaders.emplace_back()) = create_shader_module(name);
-		ERROR_IF(failed(res), stl::fmt("Shader %s creation failed with %s", name.data(), to_cstr(res)));
+		ERROR_IF(failed(res), std::fmt("Shader %s creation failed with %s", name.data(), to_cstr(res)));
 		if (failed(res)) {
 			for (auto& shader_ : shaders) {
 				parent_device->device.destroyShaderModule(shader_->stage.shaderModule);
@@ -279,20 +279,20 @@ vk::ResultValue<stl::vector<Shader*>> PipelineFactory::create_shaders(const stl:
 		if (stage_->stage.stage == vk::ShaderStageFlagBits::eVertex) vertex_shader = stage_;
 		else if (stage_->stage.stage == vk::ShaderStageFlagBits::eFragment) fragment_shader = stage_;
 		used_stages |= stage_->stage.stage;
-		WARN_IF(!supported(stage_->stage.stage), stl::fmt("%s Shader unsupported", to_string(stage_->stage.stage).c_str()));
+		WARN_IF(!supported(stage_->stage.stage), std::fmt("%s Shader unsupported", to_string(stage_->stage.stage).c_str()));
 	}
 
 	ERROR_IF((used_stages & vk::ShaderStageFlagBits::eAllGraphics) && (used_stages & vk::ShaderStageFlagBits::eCompute), "Compute and Graphics stages can't be used in same pipeline");
 
 	if (vertex_shader != nullptr && fragment_shader != nullptr) {
 
-		WARN_IF(vertex_shader->info.output_vars.size() != fragment_shader->info.input_vars.size(), stl::fmt("%s outputs don't map to %s Inputs 1:1 (%lu vs %lu)", vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
+		WARN_IF(vertex_shader->info.output_vars.size() != fragment_shader->info.input_vars.size(), std::fmt("%s outputs don't map to %s Inputs 1:1 (%lu vs %lu)", vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
 		auto vertex_out = vertex_shader->info.output_vars.begin();
 		const auto vertex_out_end = vertex_shader->info.output_vars.end();
 		auto fragment_input = fragment_shader->info.input_vars.begin();
 
 		for (; vertex_out != vertex_out_end; ++vertex_out, ++fragment_input) {
-			ERROR_IF(*fragment_input != *vertex_out, stl::fmt("%s output does not match %s inputs", vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
+			ERROR_IF(*fragment_input != *vertex_out, std::fmt("%s output does not match %s inputs", vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
 		}
 	} else if (vertex_shader != nullptr || fragment_shader != nullptr) {
 		// TODO: Add compute shader logic
@@ -304,42 +304,42 @@ vk::ResultValue<stl::vector<Shader*>> PipelineFactory::create_shaders(const stl:
 
 void PipelineFactory::destroy_pipeline_layout(Layout* _layout) {
 	const auto hash_key = _layout->hash;
-	ERROR_IF(!layout_map.contains(hash_key), stl::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
+	ERROR_IF(!layout_map_.contains(hash_key), std::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
 
-	if (0 == --layout_map[hash_key].first) {
-		DEBUG(stl::fmt("Deleting cached layout %s", _layout->layout_info.name.data()));
+	if (0 == --layout_map_[hash_key].first) {
+		DEBUG(std::fmt("Deleting cached layout %s", _layout->layout_info.name.data()));
 		parent_device->device.destroyPipelineLayout(_layout->layout);
 		for (auto& dsl_ : _layout->descriptor_set_layouts) {
 			parent_device->device.destroyDescriptorSetLayout(dsl_);
 		}
-		layout_map.erase(hash_key);
+		layout_map_.erase(hash_key);
 	}
 }
 
 void PipelineFactory::destroy_pipeline(Pipeline* _pipeline) {
 	const auto hash_key = _pipeline->hash;
-	ERROR_IF(!pipeline_map.contains(hash_key), stl::fmt("Destroy called on unexisting pipeline %s", _pipeline->name.c_str()));
+	ERROR_IF(!pipeline_map_.contains(hash_key), std::fmt("Destroy called on unexisting pipeline %s", _pipeline->name.c_str()));
 
-	if (0 >= --pipeline_map[hash_key].first) {
-		DEBUG(stl::fmt("Deleting cached pipeline %s", _pipeline->name.data()));
+	if (0 >= --pipeline_map_[hash_key].first) {
+		DEBUG(std::fmt("Deleting cached pipeline %s", _pipeline->name.data()));
 		for (auto& shader_ : _pipeline->shaders) {
 			this->destroy_shader_module(shader_);
 		}
 		this->destroy_pipeline_layout(_pipeline->layout);
 		parent_device->device.destroyPipeline(_pipeline->pipeline);
-		layout_map.erase(hash_key);
+		layout_map_.erase(hash_key);
 	}
 }
 
-vk::ResultValue<stl::vector<vk::DescriptorSetLayout>> PipelineFactory::create_descriptor_layouts(const ShaderInfo& _shader_info) {
+vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_descriptor_layouts(const ShaderInfo& _shader_info) {
 	auto result = vk::Result::eSuccess;
-	stl::vector<vk::DescriptorSetLayout> descriptor_set_layout;
+	std::vector<vk::DescriptorSetLayout> descriptor_set_layout;
 
 	if (_shader_info.descriptors.empty()) {
 		return vk::ResultValue(result, descriptor_set_layout);
 	}
 
-	stl::vector<vk::DescriptorSetLayoutBinding> bindings;
+	std::vector<vk::DescriptorSetLayoutBinding> bindings;
 	u32 current_set = _shader_info.descriptors.front().set;
 
 	for (auto& dsi_ : _shader_info.descriptors) {
@@ -356,7 +356,7 @@ vk::ResultValue<stl::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 				.pBindings = bindings.data(),
 			});
 			bindings.clear();
-			ERROR_IF(failed(result), stl::fmt("Set %d creation failed with %s", current_set, to_cstr(result)));
+			ERROR_IF(failed(result), std::fmt("Set %d creation failed with %s", current_set, to_cstr(result)));
 			if (failed(result)) {
 				for (auto& dsl_ : descriptor_set_layout) {
 					parent_device->device.destroyDescriptorSetLayout(dsl_);
@@ -373,7 +373,7 @@ vk::ResultValue<stl::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 			.pBindings = bindings.data(),
 		});
 		bindings.clear();
-		ERROR_IF(failed(result), stl::fmt("Set %d creation failed with %s", current_set, to_cstr(result)));
+		ERROR_IF(failed(result), std::fmt("Set %d creation failed with %s", current_set, to_cstr(result)));
 		if (failed(result)) {
 			for (auto& dsl_ : descriptor_set_layout) {
 				parent_device->device.destroyDescriptorSetLayout(dsl_);
@@ -387,14 +387,14 @@ vk::ResultValue<stl::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 }
 
 void merge_acc_descriptor(DescriptorInfo* _acc, DescriptorInfo& _info) {
-	stl::map<u32, DescriptorInfo> binding_map;
+	std::map<u32, DescriptorInfo> binding_map;
 	ERROR_IF(_info.set != _acc->set, "Descriptor Set mismatch");
-	ERROR_IF(_acc->binding != _info.binding, stl::fmt("Bindings %s and %s don't match.", _acc->name != _info.name));
+	ERROR_IF(_acc->binding != _info.binding, std::fmt("Bindings %s and %s don't match.", _acc->name != _info.name));
 	_acc->name = move(_info.name);
 	_acc->stages |= _info.stages;
 }
 
-vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vector<Shader*>& _shaders) {
+vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vector<Shader*>& _shaders) {
 
 	auto result = vk::Result::eSuccess;
 	vk::PipelineLayout layout;
@@ -403,8 +403,8 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 	for (const auto& shader_ : _shaders) {
 		layout_key = hash_combine(layout_key, shader_->layout_hash);
 	}
-	if (layout_map.contains(layout_key)) {
-		auto& [ref_count_, layout_] = layout_map[layout_key];
+	if (layout_map_.contains(layout_key)) {
+		auto& [ref_count_, layout_] = layout_map_[layout_key];
 		++ref_count_;
 		return vk::ResultValue(result, &layout_);
 	}
@@ -424,10 +424,10 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 		return _a.set != _b.set ? _a.set < _b.set : _a.binding < _b.binding;
 	};
 
-	stl::vector<DescriptorInfo> descriptors;
+	std::vector<DescriptorInfo> descriptors;
 	for (auto& shader_ : _shaders) {
 		for (auto& descriptor_ : shader_->info.descriptors) {
-			auto find_d = stl::ranges::lower_bound(descriptors, descriptor_, descriptor_info_lt);
+			auto find_d = std::ranges::lower_bound(descriptors, descriptor_, descriptor_info_lt);
 			if (find_d != descriptors.end()) {
 				merge_acc_descriptor(&*find_d, descriptor_);
 			} else {
@@ -435,29 +435,29 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 			}
 		}
 	}
-	stl::ranges::sort(descriptors, descriptor_info_lt);
+	std::ranges::sort(descriptors, descriptor_info_lt);
 
-	stl::map<stl::string, u32> descriptor_names;
+	std::map<std::string, u32> descriptor_names;
 	u32 i_ = 0;
 	for (auto& di_ : descriptors) {
 		descriptor_names[di_.name] = i_++;
 	}
 
-	stl::vector<InterfaceVariableInfo> input_vars;
-	stl::vector<InterfaceVariableInfo> output_vars;
+	std::vector<InterfaceVariableInfo> input_vars;
+	std::vector<InterfaceVariableInfo> output_vars;
 	if (vertex_shader != nullptr && fragment_shader != nullptr) {
 		input_vars = vertex_shader->info.input_vars;
 		output_vars = fragment_shader->info.output_vars;
 	}
 
-	stl::vector<vk::PushConstantRange> push_ranges;
+	std::vector<vk::PushConstantRange> push_ranges;
 	u32 offset = max_value<u32>;
 	u32 end_offset = min_value<u32>;
 	vk::ShaderStageFlags stage = {};
 	for (auto& shader_ : _shaders) {
 		for (auto& pcr_ : shader_->info.push_ranges) {
-			offset = stl::min(pcr_.offset, offset);
-			end_offset = stl::max(pcr_.offset + pcr_.size, end_offset);
+			offset = std::min(pcr_.offset, offset);
+			end_offset = std::max(pcr_.offset + pcr_.size, end_offset);
 			stage |= pcr_.stageFlags;
 		}
 	}
@@ -478,9 +478,9 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 		.push_ranges = move(push_ranges),
 	};
 
-	stl::vector<vk::DescriptorSetLayout> descriptor_layouts;
+	std::vector<vk::DescriptorSetLayout> descriptor_layouts;
 	tie(result, descriptor_layouts) = create_descriptor_layouts(pipeline_info);
-	ERROR_IF(failed(result), stl::fmt("Descriptor layouts creation for %s failed with %s", pipeline_info.name.c_str(), to_cstr(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), std::fmt("Descriptor layouts creation for %s failed with %s", pipeline_info.name.c_str(), to_cstr(result))) THEN_CRASH(result);
 
 	tie(result, layout) = parent_device->device.createPipelineLayout({
 		.setLayoutCount = cast<u32>(descriptor_layouts.size()),
@@ -488,10 +488,10 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const stl::vect
 		.pushConstantRangeCount = cast<u32>(pipeline_info.push_ranges.size()),
 		.pPushConstantRanges = pipeline_info.push_ranges.data(),
 	});
-	ERROR_IF(failed(result), stl::fmt("Pipeline layout creation for %s failed with %s", pipeline_info.name.c_str(), to_cstr(result))) THEN_CRASH(result);
+	ERROR_IF(failed(result), std::fmt("Pipeline layout creation for %s failed with %s", pipeline_info.name.c_str(), to_cstr(result))) THEN_CRASH(result);
 	parent_device->set_object_name(layout, pipeline_info.name);
 
-	auto& [key_, layout_] = layout_map[layout_key] = {
+	auto& [key_, layout_] = layout_map_[layout_key] = {
 		1u,
 		{
 			.hash = layout_key,
@@ -509,8 +509,8 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 	vk::Pipeline pipeline;
 
 	usize pipeline_key = hash_any(_create_info);
-	if (pipeline_map.contains(pipeline_key)) {
-		auto& entry_ = pipeline_map[pipeline_key];
+	if (pipeline_map_.contains(pipeline_key)) {
+		auto& entry_ = pipeline_map_[pipeline_key];
 		++entry_.first;
 		return vk::ResultValue(vk::Result::eSuccess, &entry_.second);
 	}
@@ -520,21 +520,21 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 
 	Layout* pipeline_layout;
 	tie(result, pipeline_layout) = create_pipeline_layout(shaders);
-	ERROR_IF(failed(result), stl::fmt("Pipeline layout creation for %s failed with %s", _create_info.name.c_str(), to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Pipeline layout creation for %s failed with %s", _create_info.name.c_str(), to_cstr(result)));
 
-	stl::vector<ShaderStage> shader_stages(shaders.size());
-	stl::ranges::transform(shaders, shader_stages.begin(), [](Shader* _s) {
+	std::vector<ShaderStage> shader_stages(shaders.size());
+	std::ranges::transform(shaders, shader_stages.begin(), [](Shader* _s) {
 		return _s->stage;
 	});
 
-	stl::vector<vk::VertexInputAttributeDescription> input_attributes(pipeline_layout->layout_info.input_vars.size());
+	std::vector<vk::VertexInputAttributeDescription> input_attributes(pipeline_layout->layout_info.input_vars.size());
 	for (auto& ivs : pipeline_layout->layout_info.input_vars) {
 		auto& in_attr = _create_info.vertex_input.attributes;
-		auto match_iv = stl::ranges::find_if(in_attr, [&_name = ivs.name](auto& _ia) {
+		auto match_iv = std::ranges::find_if(in_attr, [&_name = ivs.name](auto& _ia) {
 			return _ia.attr_name == _name;
 		});
-		ERROR_IF(match_iv == in_attr.end(), stl::fmt("Attribute %s required by shader, not found", ivs.name.c_str()))
-		ELSE_IF_ERROR(match_iv->format != ivs.format, stl::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)", ivs.name.c_str(), to_cstr(ivs.format), to_cstr(match_iv->format)));
+		ERROR_IF(match_iv == in_attr.end(), std::fmt("Attribute %s required by shader, not found", ivs.name.c_str()))
+		ELSE_IF_ERROR(match_iv->format != ivs.format, std::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)", ivs.name.c_str(), to_cstr(ivs.format), to_cstr(match_iv->format)));
 
 		input_attributes[ivs.location] = {
 			.location = ivs.location,
@@ -589,7 +589,7 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 		.logicOp = _create_info.color_blend.logic_op,
 		.attachmentCount = cast<u32>(_create_info.color_blend.attachments.size()),
 		.pAttachments = _create_info.color_blend.attachments.data(),
-		.blendConstants = stl::array{
+		.blendConstants = std::array{
 			_create_info.color_blend.blend_constants.x,
 			_create_info.color_blend.blend_constants.y,
 			_create_info.color_blend.blend_constants.z,
@@ -615,10 +615,10 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 		.layout = pipeline_layout->layout,
 		.renderPass = _create_info.renderpass.renderpass,
 	});
-	ERROR_IF(failed(result), stl::fmt("Pipeline %s creation failed with %s", _create_info.name.c_str(), to_cstr(result)));
+	ERROR_IF(failed(result), std::fmt("Pipeline %s creation failed with %s", _create_info.name.c_str(), to_cstr(result)));
 	parent_device->set_object_name(pipeline, _create_info.name);
 
-	auto& [key_, pipeline_] = pipeline_map[pipeline_key] = {
+	auto& [key_, pipeline_] = pipeline_map_[pipeline_key] = {
 		1u,
 		Pipeline{
 			.shaders = move(shaders),
@@ -747,4 +747,32 @@ usize std::hash<PipelineCreateInfo>::operator()(const PipelineCreateInfo& _value
 
 void Pipeline::destroy() {
 	parent_factory->destroy_pipeline(this);
+}
+
+PipelineFactory::PipelineFactory(PipelineFactory&& _other) noexcept: parent_device{ _other.parent_device }
+                                                                   , shader_map_{ std::move(_other.shader_map_) }
+                                                                   , layout_map_{ std::move(_other.layout_map_) }
+                                                                   , pipeline_map_{ std::move(_other.pipeline_map_) } {}
+
+PipelineFactory& PipelineFactory::operator=(PipelineFactory&& _other) noexcept {
+	if (this == &_other) return *this;
+	parent_device = _other.parent_device;
+	shader_map_ = std::move(_other.shader_map_);
+	layout_map_ = std::move(_other.layout_map_);
+	pipeline_map_ = std::move(_other.pipeline_map_);
+	return *this;
+}
+
+PipelineFactory::~PipelineFactory() {
+	for (auto& [k, v] : pipeline_map_) {
+		destroy_pipeline(&v.second);
+	}
+	for (auto& [k, v] : layout_map_) {
+		WARN(std::fmt("Pipeline layout %s not released by pipeline!", v.second.layout_info.name.c_str()));
+		destroy_pipeline_layout(&v.second);
+	}
+	for (auto& [k, v] : shader_map_) {
+		WARN(std::fmt("Shader Module %s not released by pipeline!", v.second.info.name.c_str()));
+		destroy_shader_module(&v.second);
+	}
 }

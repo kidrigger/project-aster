@@ -197,7 +197,6 @@
     <ClCompile Include="logger.cc" />
     <ClCompile Include="core\context.cc" />
     <ClCompile Include="core\device.cc" />
-    <ClCompile Include="source.cc" />
     <ClCompile Include="core\swapchain.cc" />
     <ClCompile Include="core\window.cc" />
     <ClCompile Include="thirdparty\imgui\imgui.cpp" />

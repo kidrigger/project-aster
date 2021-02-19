@@ -9,11 +9,11 @@
 
 struct RenderPass {
 	vk::RenderPass renderpass;
-	stl::string name;
+	std::string name;
 	usize attachment_format;
 	Device* parent_device;
 
-	static vk::ResultValue<RenderPass> create(const stl::string& _name, Device* _device, const vk::RenderPassCreateInfo& _create_info);
+	static vk::ResultValue<RenderPass> create(const std::string& _name, Device* _device, const vk::RenderPassCreateInfo& _create_info);
 
 	void destroy();
 };

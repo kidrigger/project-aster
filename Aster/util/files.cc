@@ -6,15 +6,15 @@
 #include <vector>
 #include <fstream>
 
-b8 file_exists(const stl::string_view& _name) noexcept {
+b8 file_exists(const std::string_view& _name) noexcept {
 	struct stat s;
 	return stat(_name.data(), &s) == 0;
 }
 
-stl::vector<u32> load_binary32_file(const stl::string_view& _name) noexcept {
-	ERROR_IF(!file_exists(_name), stl::fmt("File '%s' does not exist", _name.data()));
+std::vector<u32> load_binary32_file(const std::string_view& _name) noexcept {
+	ERROR_IF(!file_exists(_name), std::fmt("File '%s' does not exist", _name.data()));
 
-	stl::vector<u32> filedata;
+	std::vector<u32> filedata;
 	std::ifstream file(_name.data(), std::ios::ate | std::ios::binary);
 	if (file.is_open()) {
 		size_t filesize = file.tellg();

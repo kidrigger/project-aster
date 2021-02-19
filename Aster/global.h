@@ -22,8 +22,6 @@
 
 #include <optick/optick.h>
 
-namespace stl = std;
-
 inline bool failed(vk::Result _result) {
 	return _result != vk::Result::eSuccess;
 }
@@ -38,19 +36,19 @@ namespace std {
 }
 
 inline const char* to_cstr(const vk::Result& _val) {
-	static stl::string cp_buffer = to_string(_val).c_str();
+	static std::string cp_buffer = to_string(_val).c_str();
 	return cp_buffer.c_str();
 }
 
 template <typename T>
 const char* to_cstr(const T& _val) {
-	static stl::string buffer = to_string(_val).c_str();
+	static std::string buffer = to_string(_val).c_str();
 	return buffer.c_str();
 }
 
 // TODO: Check why inline namespaces aren't working in MSVC 19.27.29110
-using namespace stl::literals::string_literals;
-using namespace stl::literals::string_view_literals;
+using namespace std::literals::string_literals;
+using namespace std::literals::string_view_literals;
 
 template <typename T>
 [[nodiscard]] constexpr u64 get_vk_handle(const T& d) noexcept {
@@ -58,15 +56,15 @@ template <typename T>
 }
 
 template <typename F>
-struct stl::hash<vk::Flags<F>> {
+struct std::hash<vk::Flags<F>> {
 	usize operator()(const vk::Flags<F>& _val) {
-		return stl::hash<u32>()(cast<u32>(_val));
+		return std::hash<u32>()(cast<u32>(_val));
 	}
 };
 
 template <typename T>
 usize hash_any(const T& _val) {
-	return stl::hash<stl::remove_cvref_t<T>>()(_val);
+	return std::hash<std::remove_cvref_t<T>>()(_val);
 }
 
 inline usize hash_combine(usize _hash0, usize _hash1) {
@@ -84,7 +82,7 @@ struct Time {
 
 	void update() {
 		const auto new_elapsed = glfwGetTime();
-		delta = stl::clamp(new_elapsed - elapsed, 0.0, 0.1);
+		delta = std::clamp(new_elapsed - elapsed, 0.0, 0.1);
 		elapsed = new_elapsed;
 	}
 };

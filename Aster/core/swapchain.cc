@@ -1,7 +1,8 @@
-/*=========================================*/
-/*  Aster: core/swapchain.cc               */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: swapchain.cc
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #include "swapchain.h"
 
 Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _device)

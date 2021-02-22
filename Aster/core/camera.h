@@ -1,10 +1,11 @@
-/*=========================================*/
-/*  Aster: core/camera.h                   */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: camera.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <global.h>
+#include <stdafx.h>
 
 struct Camera {
 	mat4 projection;
@@ -16,15 +17,17 @@ struct Camera {
 	f32 far_plane;
 	vec2 screen_size;
 	f32 fov;
-	f32 pad_;
+private:
+	f32 pad_{};
+public:
 
-	void init(const vec3& _position, const vec3& _direction, const vk::Extent2D& _extent, f32 _near_plane, f32 _far_plane, f32 _vertical_fov) {
-		position = _position;
-		direction = normalize(_direction);
-		screen_size = vec2(_extent.width, _extent.height);
-		near_plane = _near_plane;
-		far_plane = _far_plane;
-		fov = _vertical_fov;
+	Camera(const vec3& _position, const vec3& _direction, const vk::Extent2D& _screen_size, const f32 _near_plane, const f32 _far_plane, const f32 _vertical_fov)
+		: position{ _position }
+		, near_plane{ _near_plane }
+		, direction{ _direction }
+		, far_plane{ _far_plane }
+		, screen_size{ _screen_size.width, _screen_size.height }
+		, fov{ _vertical_fov } {
 		projection = glm::perspective(fov, screen_size.x / screen_size.y, near_plane, far_plane);
 		view = lookAt(position, direction + position, vec3(0, 1, 0));
 	}
@@ -34,53 +37,41 @@ struct Camera {
 		projection = glm::perspective(fov, screen_size.x / screen_size.y, near_plane, far_plane);
 		view = lookAt(position, direction + position, vec3(0, 1, 0));
 	}
-
-	void destroy() { }
 };
 
 struct CameraController {
 	Window* window;
 	Camera* camera;
 
-	b8 flip_vertical;
-	b8 flip_horizontal;
-
 	f32 speed;
 
-	f64 prev_x;
-	f64 prev_y;
+	b8 flip_vertical{ false };
+	b8 flip_horizontal{ false };
 
-	f32 yaw;
-	f32 pitch;
+	f64 prev_x{};
+	f64 prev_y{};
+
+	f32 yaw{ 0.0f };
+	f32 pitch{ 0.0f };
 
 	enum class Mode {
 		eCursor,
-		eFPS,
+		eFirstPerson,
 	};
 
-	Mode mode;
+	Mode mode{ Mode::eCursor };
 
-	void init(Window* _window, Camera* _camera, f32 _speed) {
-		camera = _camera;
-		window = _window;
-		speed = _speed;
-
-		yaw = 0.0f;
-		pitch = 0.0f;
-
-		flip_horizontal = false;
-		flip_vertical = false;
-
+	CameraController(Window* _window, Camera* _camera, const f32 _speed) : window{ _window }
+	                                                                     , camera{ _camera }
+	                                                                     , speed{ _speed } {
 		glfwGetCursorPos(window->window, &prev_x, &prev_y);
-
-		mode = Mode::eCursor;
 	}
 
 	void update() {
 		ERROR_IF(camera == nullptr, "Camera is nullptr, using outside init-destroy");
 
-		vec3 up = vec3(0, 1, 0);
-		vec3 right = normalize(cross(up, camera->direction));
+		vec3 up{ 0, 1, 0 };
+		const auto right = normalize(cross(up, camera->direction));
 		up = cross(camera->direction, right);
 
 		vec3 move_dir(0);
@@ -89,7 +80,7 @@ struct CameraController {
 		if (glfwGetKey(window->window, GLFW_KEY_W)) move_dir += camera->direction;
 		if (glfwGetKey(window->window, GLFW_KEY_S)) move_dir -= camera->direction;
 
-		f32 len = length(move_dir);
+		const auto len = length(move_dir);
 		if (len > 0) {
 			camera->position += move_dir * speed * cast<f32>(g_time.delta) / len;
 		}
@@ -97,7 +88,7 @@ struct CameraController {
 		if (glfwGetMouseButton(window->window, GLFW_MOUSE_BUTTON_2)) {
 
 			if (mode == Mode::eCursor) {
-				mode = Mode::eFPS;
+				mode = Mode::eFirstPerson;
 				glfwGetCursorPos(window->window, &prev_x, &prev_y);
 			}
 
@@ -105,38 +96,33 @@ struct CameraController {
 			f64 y;
 			glfwGetCursorPos(window->window, &x, &y);
 
-			constexpr f32 maxPitch = 89.0_deg;
-			constexpr f32 PI = glm::pi<f32>();
-			constexpr f32 TAU = glm::two_pi<f32>();
+			constexpr auto max_pitch = 89.0_deg;
+			constexpr auto pi = glm::pi<f32>();
+			constexpr auto tau = glm::two_pi<f32>();
 
-			f64 xoffset = x - prev_x;
-			f64 yoffset = prev_y - y;
+			auto x_offset = x - prev_x;
+			auto y_offset = prev_y - y;
 			prev_x = x;
 			prev_y = y;
 
-			f64 sensitivity = 0.01f;
-			xoffset *= sensitivity;
-			yoffset *= sensitivity;
+			const auto sensitivity = 0.01;
+			x_offset *= sensitivity;
+			y_offset *= sensitivity;
 
-			yaw += cast<f32>(xoffset) * (flip_horizontal ? -1.0f : 1.0f);
-			pitch += cast<f32>(yoffset) * (flip_vertical ? -1.0f : 1.0f);
+			yaw += cast<f32>(x_offset) * (flip_horizontal ? -1.0f : 1.0f);
+			pitch += cast<f32>(y_offset) * (flip_vertical ? -1.0f : 1.0f);
 
-			pitch = std::clamp(pitch, -maxPitch, maxPitch);
+			pitch = std::clamp(pitch, -max_pitch, max_pitch);
 
-			if (yaw > PI) {
-				yaw -= TAU;
-			} else if (yaw <= -PI) {
-				yaw += TAU;
+			if (yaw > pi) {
+				yaw -= tau;
+			} else if (yaw <= -pi) {
+				yaw += tau;
 			}
 
 			camera->direction = vec3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch));
 		} else {
 			mode = Mode::eCursor;
 		}
-	}
-
-	void destroy() {
-		camera = nullptr;
-		window = nullptr;
 	}
 };

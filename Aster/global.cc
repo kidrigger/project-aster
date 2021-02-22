@@ -1,10 +1,10 @@
-/*=========================================*/
-/*  Aster: global.cc	                   */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: global.cc
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #include "global.h"
 
-#include <config.h>
 #include <cstdio>
 #include <cstdarg>
 
@@ -63,14 +63,14 @@ Time g_time = Time();
 //#endif
 //}
 
-std::string std::internal_fmt_(const char* fmt, ...) {
+std::string std::impl::format(const char* _fmt, ...) {
 	va_list args;
-	va_start(args, fmt);
+	va_start(args, _fmt);
 
-	i32 req = vsnprintf(nullptr, 0, fmt, args) + 1;
+	const auto req = vsnprintf(nullptr, 0, _fmt, args) + 1;
 	string buf(req, '\0');
-	vsnprintf(buf.data(), buf.size(), fmt, args);
+	vsnprintf(buf.data(), buf.size(), _fmt, args);
 
 	va_end(args);
-	return move(buf);
+	return buf;
 }

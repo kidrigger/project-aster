@@ -1,10 +1,11 @@
-/*=========================================*/
-/*  Aster: core/glfw_context.h             */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: glfw_context.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <global.h>
+#include <stdafx.h>
 
 struct GlfwContext {
 	static i32 post_error() noexcept {

@@ -1,8 +1,11 @@
 // =============================================
-//  Aster: shader.fs.hlsl
+//  Aster: stdafx.h
 //  Copyright (c) 2020-2021 Anish Bhobe
 // =============================================
 
-float4 main(float4 color : COLOR_ATTR) : SV_TARGET {
-	return color;
-}
+#pragma once
+
+#include <config.h>
+#include <constants.h>
+#include <logger.h>
+#include <global.h>

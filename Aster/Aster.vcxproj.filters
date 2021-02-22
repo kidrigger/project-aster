@@ -78,6 +78,7 @@
     <ClInclude Include="core\pipeline.h" />
     <ClInclude Include="thirdparty\spirv_reflect\spirv_reflect.h" />
     <ClInclude Include="core\renderpass.h" />
+    <ClInclude Include="stdafx.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\shader.fs.hlsl" />

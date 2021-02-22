@@ -1,17 +1,17 @@
-/*=========================================*/
-/*  Aster: core/device.h                   */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: device.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <global.h>
+#include <stdafx.h>
 #include <iterator>
 #include <core/context.h>
 #include <core/window.h>
 
 #include <span>
 #include <string_view>
-#include <unordered_set>
 
 struct Device;
 

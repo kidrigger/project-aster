@@ -1,10 +1,11 @@
-/*=========================================*/
-/*  Aster: core/renderpass.h               */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: renderpass.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <global.h>
+#include <stdafx.h>
 #include <core/device.h>
 
 struct RenderPass {

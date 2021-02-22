@@ -1,7 +1,8 @@
-/*=========================================*/
-/*  Aster: core/window.cc	               */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: window.cc
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #include "window.h"
 #include <logger.h>
 #include <core/context.h>

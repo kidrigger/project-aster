@@ -1,10 +1,11 @@
-/*=========================================*/
-/*  Aster: core/pipeline.h                 */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: pipeline.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <global.h>
+#include <stdafx.h>
 #include <core/device.h>
 #include <core/renderpass.h>
 
@@ -99,8 +100,8 @@ class PipelineFactory;
 
 struct InterfaceVariableInfo {
 	std::string name;
-	u32 location;
-	vk::Format format;
+	u32 location{};
+	vk::Format format{};
 
 	b8 operator!=(const InterfaceVariableInfo& _other) const {
 		return this->name != _other.name || this->location != _other.location || this->format != _other.format;
@@ -112,12 +113,12 @@ struct InterfaceVariableInfo {
 };
 
 struct DescriptorInfo {
-	vk::DescriptorType type;
-	u32 set = 0;
-	u32 binding = 0;
-	u32 array_length = 1;
+	vk::DescriptorType type{};
+	u32 set{ 0 };
+	u32 binding{ 0 };
+	u32 array_length{ 1 };
 	vk::ShaderStageFlags stages = {};
-	u32 block_size;
+	u32 block_size{};
 	std::string name;
 
 	b8 operator!=(const DescriptorInfo& _other) const {
@@ -128,6 +129,7 @@ struct DescriptorInfo {
 namespace std {
 	template <>
 	struct hash<DescriptorInfo> {
+		[[nodiscard]]
 		usize operator()(const DescriptorInfo& _val) noexcept;
 	};
 }
@@ -144,6 +146,7 @@ struct ShaderInfo {
 namespace std {
 	template <>
 	struct hash<ShaderInfo> {
+		[[nodiscard]]
 		usize operator()(const ShaderInfo& _val) noexcept;
 	};
 }
@@ -151,8 +154,8 @@ namespace std {
 struct Shader {
 	ShaderStage stage;
 	ShaderInfo info;
-	usize program_hash;
-	usize layout_hash;
+	usize program_hash{};
+	usize layout_hash{};
 };
 
 struct PipelineCreateInfo {
@@ -161,9 +164,9 @@ struct PipelineCreateInfo {
 
 	struct InputAttribute {
 		std::string_view attr_name;
-		u32 binding = 0;
-		u32 offset = 0;
-		vk::Format format;
+		u32 binding{ 0 };
+		u32 offset{ 0 };
+		vk::Format format{};
 	};
 
 	struct {
@@ -172,48 +175,49 @@ struct PipelineCreateInfo {
 	} vertex_input;
 
 	struct {
-		vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList;
-		b32 primitive_restart_enable = false;
+		vk::PrimitiveTopology topology{ vk::PrimitiveTopology::eTriangleList };
+		b32 primitive_restart_enable{ false };
 	} input_assembly;
 
 	struct {
-		b32 enable_dynamic = true;
+		b32 enable_dynamic{ true };
 		std::vector<vk::Viewport> viewports{ 1 };
 		std::vector<vk::Rect2D> scissors{ 1 };
 	} viewport_state;
 
 	struct {
-		b32 raster_discard_enabled = false;
-		vk::PolygonMode polygon_mode = vk::PolygonMode::eFill;
-		vk::CullModeFlags cull_mode = vk::CullModeFlagBits::eBack;
-		vk::FrontFace front_face = vk::FrontFace::eClockwise;
-		b32 depth_clamp_enabled = false;
-		f32 depth_clamp = 0.0f;
+		b32 raster_discard_enabled{ false };
+		vk::PolygonMode polygon_mode{ vk::PolygonMode::eFill };
+		vk::CullModeFlags cull_mode{ vk::CullModeFlagBits::eBack };
+		vk::FrontFace front_face{ vk::FrontFace::eClockwise };
+		b32 depth_clamp_enabled{ false };
+		f32 depth_clamp{ 0.0f };
 
 		struct {
-			b32 enable = false;
-			f32 constant_factor = 0.25f;
-			f32 slope_factor = 0.75f;
+			b32 enable{ false };
+			f32 constant_factor{ 0.25f };
+			f32 slope_factor{ 0.75f };
 		} depth_bias;
 
-		f32 line_width = 1.0f;
+		f32 line_width{ 1.0f };
 	} raster_state;
 
 	struct {
-		vk::SampleCountFlagBits sample_count = vk::SampleCountFlagBits::e1;
+		vk::SampleCountFlagBits sample_count{ vk::SampleCountFlagBits::e1 };
 	} multisample_state;
 
 	std::vector<std::string_view> shader_files;
 
 	struct {
-		std::vector<vk::PipelineColorBlendAttachmentState> attachments = {
+		std::vector<vk::PipelineColorBlendAttachmentState> attachments {
 			{
 				.blendEnable = false,
 				.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
-			} };
-		b32 logic_op_enable = false;
-		vk::LogicOp logic_op = vk::LogicOp::eClear;
-		vec4 blend_constants = {};
+			}
+		};
+		b32 logic_op_enable{ false };
+		vk::LogicOp logic_op{ vk::LogicOp::eClear };
+		vec4 blend_constants{};
 	} color_blend;
 
 	std::vector<vk::DynamicState> dynamic_states;
@@ -222,11 +226,12 @@ struct PipelineCreateInfo {
 
 template <>
 struct std::hash<PipelineCreateInfo> {
+	[[nodiscard]]
 	usize operator()(const PipelineCreateInfo& _value) noexcept;
 };
 
 struct Layout {
-	usize hash;
+	usize hash{};
 	ShaderInfo layout_info;
 	vk::PipelineLayout layout;
 	std::vector<vk::DescriptorSetLayout> descriptor_set_layouts;
@@ -234,12 +239,12 @@ struct Layout {
 
 struct Pipeline {
 	std::vector<Shader*> shaders;
-	Layout* layout;
+	Layout* layout{};
 	vk::Pipeline pipeline;
 	std::string name;
-	usize hash;
+	usize hash{};
 
-	PipelineFactory* parent_factory;
+	PipelineFactory* parent_factory{};
 
 	void destroy();
 };
@@ -258,20 +263,22 @@ public:
 	~PipelineFactory();
 
 	vk::ResultValue<Pipeline*> create_pipeline(const PipelineCreateInfo& _create_info);
-	void destroy_pipeline(Pipeline* _pipeline);
 
 private:
+	void destroy_pipeline(Pipeline* _pipeline) noexcept;
 
 	vk::ResultValue<Shader*> create_shader_module(const std::string_view& _name);
 	vk::ResultValue<std::vector<Shader*>> create_shaders(const std::vector<std::string_view>& _names);
-	void destroy_shader_module(Shader* _shader);
+	void destroy_shader_module(Shader* _shader) noexcept;
 
 	vk::ResultValue<std::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
 	vk::ResultValue<Layout*> create_pipeline_layout(const std::vector<Shader*>& _shaders);
-	void destroy_pipeline_layout(Layout* _layout);
+	void destroy_pipeline_layout(Layout* _layout) noexcept;
 
 	// Fields
 	std::unordered_map<usize, std::pair<u32, Shader>> shader_map_;
 	std::unordered_map<usize, std::pair<u32, Layout>> layout_map_;
 	std::unordered_map<usize, std::pair<u32, Pipeline>> pipeline_map_;
+
+	friend Pipeline;
 };

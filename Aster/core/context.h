@@ -1,11 +1,11 @@
-/*=========================================*/
-/*  Aster: core/context.h                  */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: context.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <global.h>
-#include <array>
+#include <stdafx.h>
 #include <vector>
 
 /**

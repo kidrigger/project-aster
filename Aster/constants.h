@@ -1,10 +1,9 @@
-/*=========================================*/
-/*  Aster: constants.h	                   */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
-#pragma once
+// =============================================
+//  Aster: constants.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
 
-#include <config.h>
+#pragma once
 
 #include <cstdint>
 #include <cstdio>

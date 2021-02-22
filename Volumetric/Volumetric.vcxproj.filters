@@ -18,6 +18,12 @@
     <ClCompile Include="main.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="transmittance_context.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sky_view_context.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\hillaire.vs.hlsl" />
@@ -32,5 +38,19 @@
     <None Include="res\shaders\hillaire.hlsli" />
     <None Include="res\shaders\structs.hlsli" />
     <None Include="res\shaders\sky_view_lut.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="transmittance_context.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="atmosphere_info.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sun_data.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sky_view_context.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -1,7 +1,8 @@
-/*=========================================*/
-/*  Aster: core/renderpass.cc              */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: renderpass.cc
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
 #include "renderpass.h"

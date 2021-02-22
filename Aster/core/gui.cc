@@ -1,7 +1,7 @@
-/*=========================================*/
-/*  Aster: core/gui.cc                     */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: gui.cc
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
 
 #include "gui.h"
 
@@ -10,6 +10,8 @@
 #include <imgui/imgui_impl_glfw.h>
 #include <imgui/imgui_impl_vulkan.h>
 #pragma warning(pop)
+
+#include <optick/optick.h>
 
 namespace ImGui {
 	vk::DescriptorPool descriptor_pool;

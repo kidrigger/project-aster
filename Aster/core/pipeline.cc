@@ -1,7 +1,8 @@
-/*=========================================*/
-/*  Aster: core/pipeline.cc                */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: pipeline.cc
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
 #include "pipeline.h"
@@ -85,9 +86,9 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
 		std::map<std::pair<u32, u32>, DescriptorInfo> uniforms;
-		for (auto set_ : sets) {
+		for (auto* set_ : sets) {
 			for (u32 binding_idx = 0; binding_idx < set_->binding_count; ++binding_idx) {
-				SpvReflectDescriptorBinding* binding_ = set_->bindings[binding_idx];
+				auto* binding_ = set_->bindings[binding_idx];
 
 				u32 length = 1;
 				for (u32 i_dim = 0; i_dim < binding_->array.dims_count; ++i_dim) {
@@ -125,7 +126,7 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 		}
 	}
 
-	vk::ShaderStageFlagBits shader_stage = cast<vk::ShaderStageFlagBits>(reflector.GetShaderStage());
+	auto shader_stage = cast<vk::ShaderStageFlagBits>(reflector.GetShaderStage());
 
 	std::vector<InterfaceVariableInfo> input_variables;
 	u32 input_variable_count;
@@ -187,7 +188,7 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 		reflector.EnumeratePushConstantBlocks(&push_constant_count, push_constants.data());
 		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
 
-		for (auto pc_ : push_constants) {
+		for (auto* pc_ : push_constants) {
 			push_constant_ranges.emplace_back() = {
 				.stageFlags = shader_stage,
 				.offset = pc_->absolute_offset,
@@ -231,8 +232,8 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 	return vk::ResultValue<Shader*>(result, &val.second);
 }
 
-void PipelineFactory::destroy_shader_module(Shader* _shader) {
-	usize hash_key = hash_any(_shader->info.name);
+void PipelineFactory::destroy_shader_module(Shader* _shader) noexcept {
+	const auto hash_key = hash_any(_shader->info.name);
 	ERROR_IF(!shader_map_.contains(hash_key), std::fmt("Destroy called on unexisting shader %s", _shader->info.name.c_str()));
 
 	if (0 == --shader_map_[hash_key].first) {
@@ -246,7 +247,7 @@ vk::ResultValue<std::vector<Shader*>> PipelineFactory::create_shaders(const std:
 	std::vector<Shader*> shaders;
 	shaders.reserve(_names.size());
 
-	for (auto& name : _names) {
+	for (const auto& name : _names) {
 		vk::Result res;
 		tie(res, shaders.emplace_back()) = create_shader_module(name);
 		ERROR_IF(failed(res), std::fmt("Shader %s creation failed with %s", name.data(), to_cstr(res)));
@@ -302,7 +303,7 @@ vk::ResultValue<std::vector<Shader*>> PipelineFactory::create_shaders(const std:
 	return { vk::Result::eSuccess, shaders };
 }
 
-void PipelineFactory::destroy_pipeline_layout(Layout* _layout) {
+void PipelineFactory::destroy_pipeline_layout(Layout* _layout) noexcept {
 	const auto hash_key = _layout->hash;
 	ERROR_IF(!layout_map_.contains(hash_key), std::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
 
@@ -316,7 +317,7 @@ void PipelineFactory::destroy_pipeline_layout(Layout* _layout) {
 	}
 }
 
-void PipelineFactory::destroy_pipeline(Pipeline* _pipeline) {
+void PipelineFactory::destroy_pipeline(Pipeline* _pipeline) noexcept {
 	const auto hash_key = _pipeline->hash;
 	ERROR_IF(!pipeline_map_.contains(hash_key), std::fmt("Destroy called on unexisting pipeline %s", _pipeline->name.c_str()));
 
@@ -647,7 +648,7 @@ usize std::hash<ShaderInfo>::operator()(const ShaderInfo& _val) noexcept {
 }
 
 usize std::hash<DescriptorInfo>::operator()(const DescriptorInfo& _val) noexcept {
-	usize hash_ = hash_any(_val.type);
+	auto hash_ = hash_any(_val.type);
 	hash_ = hash_combine(hash_, hash_any(_val.set));
 	hash_ = hash_combine(hash_, hash_any(_val.binding));
 	hash_ = hash_combine(hash_, hash_any(_val.array_length));

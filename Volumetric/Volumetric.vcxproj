@@ -135,6 +135,7 @@
       <AdditionalIncludeDirectories>$(VULKAN_SDK)\Include;$(VCPKG_ROOT)\installed\$(VcpkgUserTriplet)\include\Common;$(SolutionDir)Aster\thirdparty;$(ProjectDir);$(SolutionDir)Aster;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpplatest</LanguageStandard>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <ExceptionHandling>Sync</ExceptionHandling>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -176,6 +177,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cc" />
+    <ClCompile Include="sky_view_context.cpp" />
+    <ClCompile Include="transmittance_context.cc" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aster\Aster.vcxproj">
@@ -225,6 +228,12 @@
     <None Include="res\shaders\hillaire.hlsli" />
     <None Include="res\shaders\sky_view_lut.hlsli" />
     <None Include="res\shaders\structs.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="atmosphere_info.h" />
+    <ClInclude Include="sky_view_context.h" />
+    <ClInclude Include="sun_data.h" />
+    <ClInclude Include="transmittance_context.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

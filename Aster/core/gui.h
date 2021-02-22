@@ -1,15 +1,15 @@
-/*=========================================*/
-/*  Aster: core/gui.h                      */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
-// ReSharper disable CppInconsistentNaming
+// =============================================
+//  Aster: gui.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
 #pragma warning(push, 0)
-#include <imgui/imgui.h>
 #pragma warning(pop)
 
 #include <core/swapchain.h>
+#include <imgui/imgui.h>
 
 namespace ImGui {
 	// Following ImGui Style

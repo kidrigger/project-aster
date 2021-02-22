@@ -1,11 +1,11 @@
-/*=========================================*/
-/*  Aster: core/swapchain.h                */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: swapchain.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <global.h>
-#include <core/context.h>
+#include <stdafx.h>
 #include <core/device.h>
 #include <core/window.h>
 

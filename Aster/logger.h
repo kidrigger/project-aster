@@ -1,10 +1,10 @@
-/*=========================================*/
-/*  Aster: logger.h                        */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: logger.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
-#include <config.h>
 #include <constants.h>
 #include <string>
 

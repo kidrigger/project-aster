@@ -1,7 +1,8 @@
-/*=========================================*/
-/*  Aster: core/context.cc                 */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: context.cc
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #include "context.h"
 
 VKAPI_ATTR b32 VKAPI_CALL Context::debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT _message_severity, VkDebugUtilsMessageTypeFlagsEXT _message_type, const VkDebugUtilsMessengerCallbackDataEXT* _callback_data, [[maybe_unused]] void* _user_data) {
@@ -61,8 +62,9 @@ void Context::init(const std::string_view& _app_name, const Version& _app_versio
 		vulkan_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 	}
 
-	vk::DynamicLoader dl;
-	PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+	const vk::DynamicLoader dl;
+	// ReSharper disable once CppInconsistentNaming
+	auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
 	tie(result, instance) = vk::createInstance({

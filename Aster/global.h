@@ -1,7 +1,8 @@
-/*=========================================*/
-/*  Aster: global.h		                   */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Aster: global.h
+//  Copyright (c) 2020-2021 Anish Bhobe
+// =============================================
+
 #pragma once
 
 #include <config.h>
@@ -20,29 +21,35 @@
 #include <vma/vk_mem_alloc.hpp>
 #pragma warning(pop)
 
-#include <optick/optick.h>
-
-inline bool failed(vk::Result _result) {
+[[nodiscard]]
+inline bool failed(const vk::Result _result) {
 	return _result != vk::Result::eSuccess;
 }
 
 namespace std {
-	string internal_fmt_(const char* _fmt, ...);
+	namespace impl {
+		string format(const char* _fmt, ...);
+	}
 
 	template <typename... Ts>
-	string fmt(const char* _fmt, Ts&&... args) {
-		return internal_fmt_(_fmt, forward<Ts>(args)...);
+	[[nodiscard]]
+	string fmt(const char* _fmt, Ts&&... _args) {
+		return impl::format(_fmt, forward<Ts>(_args)...);
 	}
 }
 
+[[nodiscard]]
 inline const char* to_cstr(const vk::Result& _val) {
-	static std::string cp_buffer = to_string(_val).c_str();
+	static std::string cp_buffer;
+	cp_buffer = to_string(_val);
 	return cp_buffer.c_str();
 }
 
 template <typename T>
+[[nodiscard]]
 const char* to_cstr(const T& _val) {
-	static std::string buffer = to_string(_val).c_str();
+	static std::string buffer;
+	buffer = to_string(_val);
 	return buffer.c_str();
 }
 
@@ -51,27 +58,34 @@ using namespace std::literals::string_literals;
 using namespace std::literals::string_view_literals;
 
 template <typename T>
-[[nodiscard]] constexpr u64 get_vk_handle(const T& d) noexcept {
+[[nodiscard]]
+constexpr u64 get_vk_handle(const T& d) noexcept {
 	return reinterpret_cast<u64>(cast<T::CType>(d));
 }
 
 template <typename F>
 struct std::hash<vk::Flags<F>> {
+	[[nodiscard]]
 	usize operator()(const vk::Flags<F>& _val) {
 		return std::hash<u32>()(cast<u32>(_val));
 	}
 };
 
 template <typename T>
+[[nodiscard]]
 usize hash_any(const T& _val) {
 	return std::hash<std::remove_cvref_t<T>>()(_val);
 }
 
+[[nodiscard]]
 inline usize hash_combine(usize _hash0, usize _hash1) {
-	return _hash0 ^ (_hash1 + 0x9e3779b9 + (_hash0 << 6) + (_hash0 >> 2));
+	constexpr usize salt_value = 0x9e3779b9;
+	return _hash0 ^ (_hash1 + salt_value + (_hash0 << 6) + (_hash0 >> 2));
 }
 
 struct Time {
+	static constexpr f64 max_delta = 0.1;
+	
 	f64 elapsed;
 	f64 delta;
 
@@ -82,13 +96,14 @@ struct Time {
 
 	void update() {
 		const auto new_elapsed = glfwGetTime();
-		delta = std::clamp(new_elapsed - elapsed, 0.0, 0.1);
+		delta = std::clamp(new_elapsed - elapsed, 0.0, max_delta);
 		elapsed = new_elapsed;
 	}
 };
 
+[[nodiscard]]
 inline usize closest_multiple(usize _val, usize _of) {
 	return _of * ((_val + _of - 1) / _of);
-};
+}
 
 extern Time g_time;

@@ -17,6 +17,8 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	tie(result, ubo) = Buffer::create("Sky View uniform buffer", device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
 	ERROR_IF(failed(result), std::fmt("Skyview UBO creation failed with %s", to_cstr(result)));
 
+	ubo_writer = BufferWriter{ &ubo };
+
 	transmittance = _transmittance;
 
 	tie(result, lut) = Image::create("Sky View LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, sky_view_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
@@ -210,20 +212,15 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	}
 }
 
-void SkyViewContext::update(Camera* _camera, SunData* _sun_data, AtmosphereInfo* _atmos) {
-	const auto& ubo_alignment = parent_factory->parent_device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
-	std::vector<u8> buf_data(ubo.size);
-	memcpy(buf_data.data(), _camera, sizeof(Camera));
-	memcpy(buf_data.data() + closest_multiple(sizeof(Camera), ubo_alignment), _sun_data, sizeof(SunData));                                                        // TODO Fix hardcode
-	memcpy(buf_data.data() + closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment), _atmos, sizeof(AtmosphereInfo)); // TODO Fix hardcode
-	parent_factory->parent_device->update_data(&ubo, std::span<u8>(buf_data.data(), buf_data.size()));
+void SkyViewContext::update(const Camera& _camera, const SunData& _sun_data, const AtmosphereInfo& _atmos) {
+	ubo_writer << _camera << _sun_data << _atmos;
 }
 
 void SkyViewContext::recalculate(vk::CommandBuffer _cmd) {
 
 	OPTICK_EVENT("Recalculate Skyview");
 	_cmd.beginDebugUtilsLabelEXT({
-		.pLabelName = "Skyview LUT Calculation",
+		.pLabelName = "Sky View LUT Calculation",
 		.color = std::array{ 0.1f, 0.0f, 0.5f, 1.0f },
 	});
 

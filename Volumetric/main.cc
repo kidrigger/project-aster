@@ -16,7 +16,7 @@
 #include <core/camera.h>
 #include <core/gui.h>
 
-#include <util/files.h>
+#include <util/buffer_writer.h>
 
 #include <vector>
 
@@ -309,33 +309,22 @@ i32 aster_main() {
 	for (u32 i = 0; i < swapchain.image_count; ++i) {
 		tie(result, uniform_buffers.emplace_back()) = Buffer::create(std::fmt("Camera Ubo %i", i), &device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
 		{
-			std::vector<u8> buf_data(closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment));
-			usize cam_offset, sun_offset, atmos_offset;
-			usize offset = 0;
-			cam_offset = offset;
-			memcpy(buf_data.data(), &camera, sizeof(Camera));
-			offset += closest_multiple(sizeof(Camera), ubo_alignment);
-			sun_offset = offset;
-			memcpy(buf_data.data() + offset, &sun, sizeof(SunData)); // TODO Fix hard-code
-			offset += closest_multiple(sizeof(SunData), ubo_alignment);
-			atmos_offset = offset;
-			memcpy(buf_data.data() + offset, &atmosphere_info, sizeof(AtmosphereInfo)); // TODO Fix hard-code
-			device.update_data(&uniform_buffers.back(), std::span<u8>(buf_data.data(), buf_data.size()));
+			BufferWriter{&uniform_buffers.back()} << camera << sun << atmosphere_info;
 
 			std::vector<vk::DescriptorBufferInfo> buf_info = {
 				{
 					.buffer = uniform_buffers.back().buffer,
-					.offset = cam_offset,
+					.offset = 0,
 					.range = sizeof(Camera),
 				},
 				{
 					.buffer = uniform_buffers.back().buffer,
-					.offset = sun_offset,
+					.offset = closest_multiple(sizeof(Camera), ubo_alignment),
 					.range = sizeof(SunData),
 				},
 				{
 					.buffer = uniform_buffers.back().buffer,
-					.offset = atmos_offset,
+					.offset = closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment),
 					.range = sizeof(AtmosphereInfo),
 				}
 			};
@@ -351,52 +340,42 @@ i32 aster_main() {
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
 
-			vk::WriteDescriptorSet wd0 = {
+			device.device.updateDescriptorSets({ {
 				.dstSet = descriptor_sets[i],
 				.dstBinding = 0,
 				.dstArrayElement = 0,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eUniformBuffer,
 				.pBufferInfo = &buf_info[0],
-			};
-
-			vk::WriteDescriptorSet wd1 = {
+			}, {
 				.dstSet = descriptor_sets[i],
 				.dstBinding = 1,
 				.dstArrayElement = 0,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eUniformBuffer,
 				.pBufferInfo = &buf_info[1],
-			};
-
-			vk::WriteDescriptorSet wd2 = {
+			}, {
 				.dstSet = descriptor_sets[i],
 				.dstBinding = 2,
 				.dstArrayElement = 0,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eUniformBuffer,
 				.pBufferInfo = &buf_info[2],
-			};
-
-			vk::WriteDescriptorSet wd3 = {
+			}, {
 				.dstSet = descriptor_sets[i],
 				.dstBinding = 3,
 				.dstArrayElement = 0,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
 				.pImageInfo = &transmittance_image_info,
-			};
-
-			vk::WriteDescriptorSet wd4 = {
+			}, {
 				.dstSet = descriptor_sets[i],
 				.dstBinding = 4,
 				.dstArrayElement = 0,
 				.descriptorCount = 1,
 				.descriptorType = vk::DescriptorType::eSampledImage,
 				.pImageInfo = &sky_view_image_info,
-			};
-
-			device.device.updateDescriptorSets({ wd0, wd1, wd2, wd3, wd4 }, {});
+			} }, {});
 		}
 	}
 
@@ -525,7 +504,7 @@ i32 aster_main() {
 			device.update_data(&uniform_buffers[frame_idx], std::span<u8>(buf_data.data(), buf_data.size()));
 		}
 
-		sky_view.update(&camera, &sun, &atmosphere_info);
+		sky_view.update(camera, sun, atmosphere_info);
 
 		// ======== Record Commands ==================================================================================================================
 

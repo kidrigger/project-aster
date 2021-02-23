@@ -234,9 +234,10 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 
 void PipelineFactory::destroy_shader_module(Shader* _shader) noexcept {
 	const auto hash_key = hash_any(_shader->info.name);
-	ERROR_IF(!shader_map_.contains(hash_key), std::fmt("Destroy called on unexisting shader %s", _shader->info.name.c_str()));
+	const auto found = shader_map_.contains(hash_key);
+	ERROR_IF(!found, std::fmt("Destroy called on unexisting shader %s", _shader->info.name.c_str()));
 
-	if (0 == --shader_map_[hash_key].first) {
+	if (found && 0 == --shader_map_[hash_key].first) {
 		DEBUG(std::fmt("Deleting cached shader %s", _shader->info.name.data()));
 		parent_device->device.destroyShaderModule(_shader->stage.shaderModule);
 		shader_map_.erase(hash_key);
@@ -305,30 +306,39 @@ vk::ResultValue<std::vector<Shader*>> PipelineFactory::create_shaders(const std:
 
 void PipelineFactory::destroy_pipeline_layout(Layout* _layout) noexcept {
 	const auto hash_key = _layout->hash;
-	ERROR_IF(!layout_map_.contains(hash_key), std::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
+	const auto found = layout_map_.contains(hash_key);
+	ERROR_IF(!found, std::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
 
-	if (0 == --layout_map_[hash_key].first) {
-		DEBUG(std::fmt("Deleting cached layout %s", _layout->layout_info.name.data()));
-		parent_device->device.destroyPipelineLayout(_layout->layout);
-		for (auto& dsl_ : _layout->descriptor_set_layouts) {
-			parent_device->device.destroyDescriptorSetLayout(dsl_);
+	try {
+		if (found && 0 == --layout_map_[hash_key].first) {
+			DEBUG(std::fmt("Deleting cached layout %s", _layout->layout_info.name.data()));
+			parent_device->device.destroyPipelineLayout(_layout->layout);
+			for (auto& dsl_ : _layout->descriptor_set_layouts) {
+				parent_device->device.destroyDescriptorSetLayout(dsl_);
+			}
+			layout_map_.erase(hash_key);
 		}
-		layout_map_.erase(hash_key);
+	} catch (std::exception& e) {
+		ERROR(e.what());
 	}
 }
 
 void PipelineFactory::destroy_pipeline(Pipeline* _pipeline) noexcept {
 	const auto hash_key = _pipeline->hash;
-	ERROR_IF(!pipeline_map_.contains(hash_key), std::fmt("Destroy called on unexisting pipeline %s", _pipeline->name.c_str()));
-
-	if (0 >= --pipeline_map_[hash_key].first) {
-		DEBUG(std::fmt("Deleting cached pipeline %s", _pipeline->name.data()));
-		for (auto& shader_ : _pipeline->shaders) {
-			this->destroy_shader_module(shader_);
+	const auto& found = pipeline_map_.contains(hash_key);
+	ERROR_IF(!found, std::fmt("Destroy called on unexisting pipeline %s", _pipeline->name.c_str()));
+	try {
+		if (found && 0 >= --pipeline_map_[hash_key].first) {
+			DEBUG(std::fmt("Deleting cached pipeline %s", _pipeline->name.data()));
+			for (auto& shader_ : _pipeline->shaders) {
+				this->destroy_shader_module(shader_);
+			}
+			this->destroy_pipeline_layout(_pipeline->layout);
+			parent_device->device.destroyPipeline(_pipeline->pipeline);
+			layout_map_.erase(hash_key);
 		}
-		this->destroy_pipeline_layout(_pipeline->layout);
-		parent_device->device.destroyPipeline(_pipeline->pipeline);
-		layout_map_.erase(hash_key);
+	} catch (std::exception& e) {
+		ERROR(e.what());
 	}
 }
 

@@ -217,6 +217,7 @@
     <ClCompile Include="thirdparty\optick\optick_server.cpp" />
     <ClCompile Include="thirdparty\renderdoc\renderdoc.cpp" />
     <ClCompile Include="thirdparty\spirv_reflect\spirv_reflect.c" />
+    <ClCompile Include="util\buffer_writer.cpp" />
     <ClCompile Include="util\files.cc" />
   </ItemGroup>
   <ItemGroup>
@@ -261,6 +262,7 @@
     <ClInclude Include="thirdparty\renderdoc\renderdoc.h" />
     <ClInclude Include="thirdparty\renderdoc\renderdoc_api.h" />
     <ClInclude Include="thirdparty\spirv_reflect\spirv_reflect.h" />
+    <ClInclude Include="util\buffer_writer.h" />
     <ClInclude Include="util\files.h" />
     <ClInclude Include="thirdparty\vma\vk_mem_alloc.h" />
     <ClInclude Include="thirdparty\vma\vk_mem_alloc.hpp" />

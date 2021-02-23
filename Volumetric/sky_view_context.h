@@ -14,6 +14,8 @@
 
 #include <core/camera.h>
 
+#include <util/buffer_writer.h>
+
 struct SkyViewContext {
 	static constexpr vk::Extent3D sky_view_lut_extent = { 192, 108, 1 };
 
@@ -26,7 +28,7 @@ struct SkyViewContext {
 
 	~SkyViewContext();
 
-	void update(Camera* _camera, SunData* _sun_data, AtmosphereInfo* _atmos);
+	void update(const Camera& _camera, const SunData& _sun_data, const AtmosphereInfo& _atmos);
 	void recalculate(vk::CommandBuffer _cmd);
 
 	// Fields
@@ -36,6 +38,7 @@ struct SkyViewContext {
 	vk::DescriptorPool descriptor_pool;
 	vk::DescriptorSet descriptor_set;
 	Buffer ubo;
+	BufferWriter ubo_writer;
 
 	Image lut;
 	ImageView lut_view;

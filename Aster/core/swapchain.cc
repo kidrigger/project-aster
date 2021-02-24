@@ -5,9 +5,9 @@
 
 #include "swapchain.h"
 
-Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _device)
-	: parent_window{ _window }
-	, parent_device{ _device }
+Swapchain::Swapchain(const std::string_view& _name, Borrowed<Window>&& _window, Borrowed<Device>&& _device)
+	: parent_window{ std::move(_window) }
+	, parent_device{ std::move(_device) }
 	, support{ &_window->surface, &_device->physical_device }
 	, name{ _name } {
 
@@ -104,8 +104,8 @@ Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _de
 	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
 }
 
-Swapchain::Swapchain(Swapchain&& _other) noexcept: parent_window{ _other.parent_window }
-                                                 , parent_device{ _other.parent_device }
+Swapchain::Swapchain(Swapchain&& _other) noexcept: parent_window{ std::move(_other.parent_window) }
+                                                 , parent_device{ std::move(_other.parent_device) }
                                                  , swapchain{ std::exchange(_other.swapchain, nullptr) }
                                                  , support{ std::move(_other.support) }
                                                  , format{ _other.format }
@@ -226,8 +226,8 @@ void Swapchain::recreate() {
 
 Swapchain& Swapchain::operator=(Swapchain&& _other) noexcept {
 	if (this == &_other) return *this;
-	parent_window = _other.parent_window;
-	parent_device = _other.parent_device;
+	parent_window = std::move(_other.parent_window);
+	parent_device = std::move(_other.parent_device);
 	swapchain = std::exchange(_other.swapchain, nullptr);
 	support = std::move(_other.support);
 	format = _other.format;

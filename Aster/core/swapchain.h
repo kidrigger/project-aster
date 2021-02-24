@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 #include <core/device.h>
 #include <core/window.h>
 
@@ -30,8 +30,8 @@ struct SurfaceSupportDetails {
 };
 
 struct Swapchain {
-	Window* parent_window;
-	Device* parent_device;
+	Borrowed<Window> parent_window;
+	Borrowed<Device> parent_device;
 
 	vk::SwapchainKHR swapchain;
 	SurfaceSupportDetails support;
@@ -47,7 +47,7 @@ struct Swapchain {
 	std::vector<vk::ImageView> image_views;
 	u32 image_count{ 0 };
 
-	Swapchain(const std::string_view& _name, Window* _window, Device* _device);
+	Swapchain(const std::string_view& _name, Borrowed<Window>&& _window, Borrowed<Device>&& _device);
 
 	Swapchain(const Swapchain& _other) = delete;
 	Swapchain(Swapchain&& _other) noexcept;

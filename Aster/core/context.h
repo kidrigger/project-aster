@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 #include <vector>
 
 /**

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 
 #include <core/pipeline.h>
 
@@ -19,7 +19,7 @@
 struct SkyViewContext {
 	static constexpr vk::Extent3D sky_view_lut_extent = { 192, 108, 1 };
 
-	SkyViewContext(PipelineFactory* _pipeline_factory, TransmittanceContext* _transmittance);
+	SkyViewContext(const Borrowed<PipelineFactory>& _pipeline_factory, const Borrowed<TransmittanceContext>& _transmittance);
 
 	SkyViewContext(const SkyViewContext& _other) = delete;
 	SkyViewContext(SkyViewContext&& _other) = delete;
@@ -44,7 +44,7 @@ struct SkyViewContext {
 	ImageView lut_view;
 
 	// Borrowed
-	TransmittanceContext* transmittance;
+	Borrowed<TransmittanceContext> transmittance;
 
-	PipelineFactory* parent_factory;
+	Borrowed<PipelineFactory> parent_factory;
 };

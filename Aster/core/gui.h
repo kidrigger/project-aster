@@ -6,14 +6,14 @@
 #pragma once
 
 #pragma warning(push, 0)
+#include <imgui/imgui.h>
 #pragma warning(pop)
 
 #include <core/swapchain.h>
-#include <imgui/imgui.h>
 
 namespace ImGui {
 	// Following ImGui Style
-	void Init(Swapchain* _swapchain);
+	void Init(const Borrowed<Swapchain>& _swapchain);
 	void Destroy();
 
 	void Recreate();

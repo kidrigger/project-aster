@@ -12,8 +12,8 @@
 #include <map>
 #include <set>
 
-Device::Device(const std::string_view& _name, Context* _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features)
-	: parent_context{ _context }
+Device::Device(const std::string_view& _name, Borrowed<Context>&& _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features)
+	: parent_context{ std::move(_context) }
 	, name{ _name } {
 	vk::Result result;
 
@@ -93,7 +93,7 @@ Device::Device(const std::string_view& _name, Context* _context, const PhysicalD
 	set_object_name(graphics_cmd_pool, "Single use Graphics command pool");
 }
 
-Device::Device(Device&& _other) noexcept: parent_context{ _other.parent_context }
+Device::Device(Device&& _other) noexcept: parent_context{ std::move(_other.parent_context) }
                                         , physical_device{ std::exchange(_other.physical_device, nullptr) }
                                         , physical_device_properties{ _other.physical_device_properties }
                                         , physical_device_features{ _other.physical_device_features }
@@ -107,7 +107,7 @@ Device::Device(Device&& _other) noexcept: parent_context{ _other.parent_context 
 
 Device& Device::operator=(Device&& _other) noexcept {
 	if (this == &_other) return *this;
-	parent_context = _other.parent_context;
+	parent_context = std::move(_other.parent_context);
 	physical_device = std::exchange(_other.physical_device, nullptr);
 	physical_device_properties = _other.physical_device_properties;
 	physical_device_features = _other.physical_device_features;
@@ -134,7 +134,7 @@ SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>
 	ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), std::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.data()))
 	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, std::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()));
 
-	auto [result, staging_buffer] = Buffer::create("_stage " + _host_buffer->name, this, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly);
+	auto [result, staging_buffer] = Buffer::create("_stage " + _host_buffer->name, borrow(this), _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly);
 	ERROR_IF(failed(result), std::fmt("Staging buffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
 
 	update_data(&staging_buffer, _data);
@@ -163,13 +163,13 @@ SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>
 	ERROR_IF(failed(result), std::fmt("Command buffer end failed with %s", to_cstr(result)));
 
 	SubmitTask<Buffer> handle;
-	result = handle.submit(this, staging_buffer, queues.transfer, transfer_cmd_pool, { cmd });
+	result = handle.submit(borrow(this), new Buffer{ std::move(staging_buffer) }, queues.transfer, transfer_cmd_pool, { cmd });
 	ERROR_IF(failed(result), std::fmt("Submit failed with %s", to_cstr(result))) THEN_CRASH(result);
 
 	return handle;
 }
 
-void Device::update_data(Buffer* _host_buffer, const std::span<u8>& _data) {
+void Device::update_data(Buffer* _host_buffer, const std::span<u8>& _data) const {
 
 	ERROR_IF(_host_buffer->memory_usage != vma::MemoryUsage::eCpuToGpu &&
 		_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly, "Memory is not on CPU so mapping can't be done. Use upload_data");
@@ -187,7 +187,7 @@ void Device::set_name(const std::string& _name) {
 	set_object_name(device, std::fmt("%s Device", _name.data()));
 }
 
-QueueFamilyIndices DeviceSelector::PhysicalDeviceInfo::get_queue_families(const Window* _window, vk::PhysicalDevice _device) {
+QueueFamilyIndices DeviceSelector::PhysicalDeviceInfo::get_queue_families(const Borrowed<Window>& _window, const vk::PhysicalDevice _device) const {
 	QueueFamilyIndices indices;
 
 	auto queue_families_ = _device.getQueueFamilyProperties();
@@ -245,7 +245,7 @@ QueueFamilyIndices DeviceSelector::PhysicalDeviceInfo::get_queue_families(const 
 	return indices;
 }
 
-vk::ResultValue<Buffer> Buffer::create(const std::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
+vk::ResultValue<Buffer> Buffer::create(const std::string& _name, const Borrowed<Device>& _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
 	auto [result, buffer] = _device->allocator.createBuffer({
 		.size = _size,
 		.usage = _usage,
@@ -259,13 +259,13 @@ vk::ResultValue<Buffer> Buffer::create(const std::string& _name, Device* _device
 	}
 
 	return vk::ResultValue<Buffer>(result, {
-		.parent_device = _device,
-		.buffer = buffer.first,
-		.allocation = buffer.second,
-		.usage = _usage,
-		.memory_usage = _memory_usage,
-		.size = _size,
-		.name = _name,
+		_device,
+		buffer.first,
+		buffer.second,
+		_usage,
+		_memory_usage,
+		_size,
+		_name,
 	});
 }
 
@@ -273,7 +273,7 @@ void Buffer::destroy() {
 	parent_device->allocator.destroyBuffer(buffer, allocation);
 }
 
-vk::ResultValue<Image> Image::create(const std::string& _name, Device* _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count, vma::MemoryUsage _memory_usage, u32 _layer_count) {
+vk::ResultValue<Image> Image::create(const std::string_view& _name, const Borrowed<Device>& _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count, vma::MemoryUsage _memory_usage, u32 _layer_count) {
 
 	auto [result, image] = _device->allocator.createImage({
 		.imageType = _image_type,
@@ -300,7 +300,7 @@ vk::ResultValue<Image> Image::create(const std::string& _name, Device* _device, 
 		.allocation = image.second,
 		.usage = _usage,
 		.memory_usage = _memory_usage,
-		.name = _name,
+		.name = std::string{_name},
 		.type = _image_type,
 		.format = _format,
 		.extent = _extent,
@@ -313,7 +313,7 @@ void Image::destroy() {
 	parent_device->allocator.destroyImage(image, allocation);
 }
 
-vk::ResultValue<ImageView> ImageView::create(Image* _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range) {
+vk::ResultValue<ImageView> ImageView::create(const Borrowed<Image>& _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range) {
 
 	auto [result, image_view] = _image->parent_device->device.createImageView({
 		.image = _image->image,
@@ -338,6 +338,6 @@ vk::ResultValue<ImageView> ImageView::create(Image* _image, vk::ImageViewType _i
 	});
 }
 
-void ImageView::destroy() {
+void ImageView::destroy() const {
 	parent_image->parent_device->device.destroyImageView(image_view);
 }

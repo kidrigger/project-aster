@@ -8,18 +8,17 @@
 #include <renderdoc/renderdoc.h>
 #include <optick/optick.h>
 
-TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos)
+TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pipeline_factory, const AtmosphereInfo& _atmos)
 	: parent_factory{ _pipeline_factory } {
 
 	vk::Result result;
 
-	auto* device = _pipeline_factory->parent_device;
-	const auto ubo_alignment = device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
+	const auto& device = _pipeline_factory->parent_device;
 
 	tie(result, lut) = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
 	ERROR_IF(failed(result), std::fmt("LUT Image could not be created with %s", to_cstr(result)));
 
-	tie(result, lut_view) = ImageView::create(&lut, vk::ImageViewType::e2D, {
+	tie(result, lut_view) = ImageView::create( borrow(lut), vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.levelCount = 1,
 		.layerCount = 1,
@@ -88,7 +87,7 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 	ERROR_IF(failed(result), std::fmt("LUT Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
 	device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
 
-	tie(result, pipeline) = _pipeline_factory->create_pipeline({
+	tie(result, pipeline) = parent_factory->create_pipeline({
 		.renderpass = renderpass,
 		.viewport_state = {
 			.enable_dynamic = false,
@@ -117,14 +116,14 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 	});
 	ERROR_IF(failed(result), std::fmt("LUT Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
 
-	recalculate(_pipeline_factory, _atmos);
+	recalculate(_atmos);
 }
 
-void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos) {
+void TransmittanceContext::recalculate(const AtmosphereInfo& _atmos) {
 	OPTICK_EVENT("Recalculate Transmittance");
 
 	rdoc::start_capture();
-	auto* device = _pipeline_factory->parent_device;
+	auto& device = parent_factory->parent_device;
 	auto [result, cmd] = device->alloc_temp_command_buffer(device->graphics_cmd_pool);
 
 	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
@@ -169,7 +168,7 @@ void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const
 }
 
 TransmittanceContext::~TransmittanceContext() {
-	auto* device = parent_factory->parent_device;
+	auto& device = parent_factory->parent_device;
 
 	lut.destroy();
 	lut_view.destroy();

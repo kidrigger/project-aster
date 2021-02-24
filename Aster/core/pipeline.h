@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 #include <core/device.h>
 #include <core/renderpass.h>
 
@@ -130,7 +130,7 @@ namespace std {
 	template <>
 	struct hash<DescriptorInfo> {
 		[[nodiscard]]
-		usize operator()(const DescriptorInfo& _val) noexcept;
+		usize operator()(const DescriptorInfo& _val) const noexcept;
 	};
 }
 
@@ -147,7 +147,7 @@ namespace std {
 	template <>
 	struct hash<ShaderInfo> {
 		[[nodiscard]]
-		usize operator()(const ShaderInfo& _val) noexcept;
+		usize operator()(const ShaderInfo& _val) const noexcept;
 	};
 }
 
@@ -209,7 +209,7 @@ struct PipelineCreateInfo {
 	std::vector<std::string_view> shader_files;
 
 	struct {
-		std::vector<vk::PipelineColorBlendAttachmentState> attachments {
+		std::vector<vk::PipelineColorBlendAttachmentState> attachments{
 			{
 				.blendEnable = false,
 				.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
@@ -227,7 +227,7 @@ struct PipelineCreateInfo {
 template <>
 struct std::hash<PipelineCreateInfo> {
 	[[nodiscard]]
-	usize operator()(const PipelineCreateInfo& _value) noexcept;
+	usize operator()(const PipelineCreateInfo& _value) const noexcept;
 };
 
 struct Layout {
@@ -251,9 +251,9 @@ struct Pipeline {
 
 class PipelineFactory {
 public:
-	Device* parent_device;
+	Borrowed<Device> parent_device;
 
-	explicit PipelineFactory(Device* _device) : parent_device{ _device } {}
+	explicit PipelineFactory(Borrowed<Device>&& _device) : parent_device{ std::move(_device) } {}
 
 	PipelineFactory(const PipelineFactory& _other) = delete;
 	PipelineFactory(PipelineFactory&& _other) noexcept;

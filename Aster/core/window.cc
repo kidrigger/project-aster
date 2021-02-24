@@ -8,8 +8,8 @@
 #include <core/context.h>
 #include <core/glfw_context.h>
 
-Window::Window(const std::string_view& _title, const Context* _context, vk::Extent2D _extent, b8 _full_screen)
-	: parent_context{ _context }
+Window::Window(const std::string_view& _title, Borrowed<Context>&& _context, vk::Extent2D _extent, b8 _full_screen)
+	: parent_context{ std::move(_context) }
 	, extent{ _extent }
 	, name{ _title }
 	, full_screen{ _full_screen } {
@@ -41,7 +41,7 @@ Window::Window(const std::string_view& _title, const Context* _context, vk::Exte
 	surface = vk::SurfaceKHR(surface_);
 }
 
-Window::Window(Window&& _other) noexcept: parent_context{ _other.parent_context }
+Window::Window(Window&& _other) noexcept: parent_context{ std::move(_other.parent_context) }
                                         , window{ std::exchange(_other.window, nullptr) }
                                         , monitor{ _other.monitor }
                                         , surface{ std::exchange(_other.surface, nullptr) }
@@ -51,7 +51,7 @@ Window::Window(Window&& _other) noexcept: parent_context{ _other.parent_context 
 
 Window& Window::operator=(Window&& _other) noexcept {
 	if (this == &_other) return *this;
-	parent_context = _other.parent_context;
+	parent_context = std::move(_other.parent_context);
 	window = _other.window;
 	monitor = _other.monitor;
 	surface = std::exchange(_other.surface, nullptr);

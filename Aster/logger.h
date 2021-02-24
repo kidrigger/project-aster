@@ -23,52 +23,46 @@ struct Logger {
 		minimum_logging_level = cast<u32>(_log_type);
 	}
 
-	template <LogType log_t>
+	template <LogType LogLevel>
 	constexpr static const char* to_cstr() {
-		if constexpr (log_t == LogType::eError) return "[ERROR]:";
-		if constexpr (log_t == LogType::eWarning) return "[WARN]: ";
-		if constexpr (log_t == LogType::eInfo) return "[INFO]: ";
-		if constexpr (log_t == LogType::eDebug) return "[DEBUG]:";
-		if constexpr (log_t == LogType::eVerbose) return "[VERB]: ";
+		if constexpr (LogLevel == LogType::eError) return "[ERROR]:";
+		if constexpr (LogLevel == LogType::eWarning) return "[WARN]: ";
+		if constexpr (LogLevel == LogType::eInfo) return "[INFO]: ";
+		if constexpr (LogLevel == LogType::eDebug) return "[DEBUG]:";
+		if constexpr (LogLevel == LogType::eVerbose) return "[VERB]: ";
 	}
 
-	template <LogType log_t>
+	template <LogType LogLevel>
 	constexpr static const char* to_color_cstr() {
-		if constexpr (log_t == LogType::eError) return ANSI_Red;
-		if constexpr (log_t == LogType::eWarning) return ANSI_Yellow;
-		if constexpr (log_t == LogType::eInfo) return ANSI_Green;
-		if constexpr (log_t == LogType::eDebug) return ANSI_White;
-		if constexpr (log_t == LogType::eVerbose) return ANSI_Blue;
+		if constexpr (LogLevel == LogType::eError) return ANSI_Red;
+		if constexpr (LogLevel == LogType::eWarning) return ANSI_Yellow;
+		if constexpr (LogLevel == LogType::eInfo) return ANSI_Green;
+		if constexpr (LogLevel == LogType::eDebug) return ANSI_White;
+		if constexpr (LogLevel == LogType::eVerbose) return ANSI_Blue;
 	}
 
-	template <LogType log_t>
-	void log(const char* _message, const char* loc, u32 line) {
-		if (cast<u32>(log_t) <= minimum_logging_level) printf("%s%s %s%s| at %s:%u%s\n", to_color_cstr<log_t>(), to_cstr<log_t>(), _message, ANSI_Black, loc, line, ANSI_Reset);
+	template <LogType LogLevel>
+	void log(const std::string_view& _message, const char* _loc, u32 _line) {
+		if (cast<u32>(LogLevel) <= minimum_logging_level) {
+			printf("%s%s %s%s| at %s:%u%s\n", to_color_cstr<LogLevel>(), to_cstr<LogLevel>(), _message.data(), ANSI_Black, _loc, _line, ANSI_Reset);
+		}
 #if !defined(NDEBUG)
-		if constexpr (log_t == LogType::eError) {
+		if constexpr (LogLevel == LogType::eError) {
 			__debugbreak();
 		}
 #endif // !defined(NDEBUG)
 	}
 
-	template <LogType log_t>
-	void log(const std::string& message, const char* loc, u32 line) {
-		return log<log_t>(message.c_str(), loc, line);
-	}
-
-	template <LogType log_t>
-	void log_cond(const char* expr_str, const char* message, const char* loc, u32 line) {
-		if (cast<u32>(log_t) <= minimum_logging_level) printf("%s%s (%s) %s%s| at %s:%u%s\n", to_color_cstr<log_t>(), to_cstr<log_t>(), expr_str, message, ANSI_Black, loc, line, ANSI_Reset);
+	template <LogType LogLevel>
+	void log_cond(const char* _expr_str, const std::string_view& _message, const char* _loc, u32 _line) {
+		if (cast<u32>(LogLevel) <= minimum_logging_level) {
+			printf("%s%s (%s) %s%s| at %s:%u%s\n", to_color_cstr<LogLevel>(), to_cstr<LogLevel>(), _expr_str, _message.data(), ANSI_Black, _loc, _line, ANSI_Reset);
+		}
 #if !defined(NDEBUG)
-		if constexpr (log_t == LogType::eError) {
+		if constexpr (LogLevel == LogType::eError) {
 			__debugbreak();
 		}
 #endif // !defined(NDEBUG)
-	}
-
-	template <LogType log_t>
-	void log_cond(const char* expr_str, const std::string& message, const char* loc, u32 line) {
-		log_cond<log_t>(expr_str, message.data(), loc, line);
 	}
 };
 

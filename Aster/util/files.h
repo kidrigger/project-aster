@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 #include <vector>
 
 b8 file_exists(const std::string_view& _name) noexcept;

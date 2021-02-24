@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 #include <iterator>
 #include <core/context.h>
 #include <core/window.h>
@@ -52,7 +52,7 @@ struct Queues {
 };
 
 struct Buffer {
-	Device* parent_device;
+	Borrowed<Device> parent_device;
 	vk::Buffer buffer;
 	vma::Allocation allocation;
 	vk::BufferUsageFlags usage;
@@ -60,13 +60,47 @@ struct Buffer {
 	usize size = 0;
 	std::string name;
 
-	static vk::ResultValue<Buffer> create(const std::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
+	/*Buffer(const Borrowed<Device>& _parent_device, const vk::Buffer& _buffer, const vma::Allocation& _allocation, const vk::BufferUsageFlags& _usage, vma::MemoryUsage _memory_usage, usize _size, const std::string& _name)
+		: parent_device{ _parent_device }
+		, buffer(_buffer)
+		, allocation(_allocation)
+		, usage(_usage)
+		, memory_usage(_memory_usage)
+		, size(_size)
+		, name(_name) {}
+
+	Buffer(const Buffer& _other) = delete;
+
+	Buffer(Buffer&& _other) noexcept
+		: parent_device{ std::move(_other.parent_device) }
+		, buffer{ _other.buffer }
+		, allocation{ _other.allocation }
+		, usage{ _other.usage }
+		, memory_usage{ _other.memory_usage }
+		, size{ _other.size }
+		, name{ std::move(_other.name) } {}
+
+	Buffer& operator=(const Buffer& _other) = delete;
+
+	Buffer& operator=(Buffer&& _other) noexcept {
+		if (this == &_other) return *this;
+		parent_device = std::move(_other.parent_device);
+		buffer = _other.buffer;
+		allocation = _other.allocation;
+		usage = _other.usage;
+		memory_usage = _other.memory_usage;
+		size = _other.size;
+		name = std::move(_other.name);
+		return *this;
+	}*/
+
+	static vk::ResultValue<Buffer> create(const std::string& _name, const Borrowed<Device>& _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
 
 	void destroy();
 };
 
 struct Image {
-	Device* parent_device;
+	Borrowed<Device> parent_device;
 	vk::Image image;
 	vma::Allocation allocation;
 	vk::ImageUsageFlags usage;
@@ -80,22 +114,22 @@ struct Image {
 	u32 layer_count;
 	u32 mip_count;
 
-	static vk::ResultValue<Image> create(const std::string& _name, Device* _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
+	static vk::ResultValue<Image> create(const std::string_view& _name, const Borrowed<Device>& _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
 
 	void destroy();
 };
 
 struct ImageView {
-	Image* parent_image;
+	Borrowed<Image> parent_image;
 	vk::ImageView image_view;
 	vk::Format format;
 	vk::ImageViewType type;
 	vk::ImageSubresourceRange subresource_range;
 	std::string name;
 
-	static vk::ResultValue<ImageView> create(Image* _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
+	static vk::ResultValue<ImageView> create(const Borrowed<Image>& _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
 
-	void destroy();
+	void destroy() const;
 };
 
 template <typename T>
@@ -108,17 +142,17 @@ struct Device {
 		vk::PhysicalDeviceFeatures features;
 		QueueFamilyIndices queue_family_indices;
 
-		PhysicalDeviceInfo(const Window* _window, vk::PhysicalDevice _device) : device(_device) {
+		PhysicalDeviceInfo(const Borrowed<Window>& _window, const vk::PhysicalDevice _device) : device(_device) {
 			properties = device.getProperties();
 			features = device.getFeatures();
 			queue_family_indices = get_queue_families(_window, device);
 		}
 
 	private:
-		QueueFamilyIndices get_queue_families(const Window* _window, vk::PhysicalDevice _device);
+		QueueFamilyIndices get_queue_families(const Borrowed<Window>& _window, vk::PhysicalDevice _device) const;
 	};
 
-	Device(const std::string_view& _name, Context* _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features);
+	Device(const std::string_view& _name, Borrowed<Context>&& _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features);
 
 	Device(const Device& _other) = delete;
 	Device(Device&& _other) noexcept;
@@ -137,7 +171,7 @@ struct Device {
 		WARN_IF(failed(result), "Debug Utils name setting failed with "s + to_string(result));
 	}
 
-	vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) {
+	vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) const {
 		vk::CommandBuffer cmd;
 		vk::CommandBufferAllocateInfo cmd_buf_alloc_info = {
 			.commandPool = _pool,
@@ -149,10 +183,10 @@ struct Device {
 	}
 
 	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const std::span<u8>& _data);
-	void update_data(Buffer* _host_buffer, const std::span<u8>& _data);
+	void update_data(Buffer* _host_buffer, const std::span<u8>& _data) const;
 
 	// fields
-	Context* parent_context;
+	Borrowed<Context> parent_context;
 	vk::PhysicalDevice physical_device;
 	vk::PhysicalDeviceProperties physical_device_properties;
 	vk::PhysicalDeviceFeatures physical_device_features;
@@ -173,17 +207,19 @@ private:
 template <typename T>
 struct SubmitTask {
 	vk::Fence fence;
-	const Device* device;
-	T payload;
+	Borrowed<Device> device{};
+	Owned<T> payload;
 	std::vector<vk::CommandBuffer> cmd;
 	vk::CommandPool pool;
 
-	vk::Result submit(Device* _device, T& _payload, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {}, std::vector<vk::Semaphore> _signal_to = {}) {
+	SubmitTask() = default;
+
+	vk::Result submit(const Borrowed<Device>& _device, Owned<T>&& _payload, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {}, std::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
 		ERROR_IF(failed(result), std::fmt("Fence creation failed with %s", to_cstr(result)));
 		fence = _fence;
-		payload = _payload;
+		payload = std::move(_payload);
 		cmd = _cmd;
 		pool = _pool;
 
@@ -207,7 +243,6 @@ struct SubmitTask {
 	[[nodiscard]] vk::Result destroy() {
 		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
 		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result)));
-		payload.destroy();
 		device->device.destroyFence(fence);
 		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
 		return result;
@@ -217,11 +252,11 @@ struct SubmitTask {
 template <>
 struct SubmitTask<void> {
 	vk::Fence fence;
-	const Device* device;
+	Borrowed<Device> device;
 	std::vector<vk::CommandBuffer> cmd;
 	vk::CommandPool pool;
 
-	[[nodiscard]] vk::Result submit(Device* _device, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {},
+	[[nodiscard]] vk::Result submit(const Borrowed<Device>& _device, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {},
 	                                const vk::PipelineStageFlags& _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, std::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
@@ -280,13 +315,13 @@ public:
 			return DeviceSelectorIntermediate{ device_set_ };
 		}
 
-		PhysicalDeviceInfo get(const u32 _idx = 0) {
+		PhysicalDeviceInfo get(const u32 _idx = 0) const {
 			ERROR_IF(_idx >= device_set_.size(), "Out of range");
 			return device_set_[_idx];
 		}
 	};
 
-	DeviceSelector(const Context* _context, const Window* _window) {
+	DeviceSelector(Borrowed<Context>&& _context, Borrowed<Window>&& _window) {
 		auto [result, available_physical_devices] = _context->instance.enumeratePhysicalDevices();
 		ERROR_IF(failed(result), "Failed fetching devices with "s + to_string(result)) THEN_CRASH(result) ELSE_IF_ERROR(available_physical_devices.empty(), "No valid devices found") THEN_CRASH(Error::eNoDevices);
 

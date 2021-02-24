@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 
 #include <core/pipeline.h>
 #include <atmosphere_info.h>
@@ -13,7 +13,7 @@
 struct TransmittanceContext {
 	static constexpr vk::Extent3D transmittance_lut_extent = { 64, 256, 1 };
 
-	TransmittanceContext(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos);
+	TransmittanceContext(const Borrowed<PipelineFactory>& _pipeline_factory, const AtmosphereInfo& _atmos);
 
 	TransmittanceContext(const TransmittanceContext& _other) = delete;
 	TransmittanceContext(TransmittanceContext&& _other) = delete;
@@ -22,7 +22,7 @@ struct TransmittanceContext {
 
 	~TransmittanceContext();
 
-	void recalculate(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos);
+	void recalculate(const AtmosphereInfo& _atmos);
 
 	// fields
 
@@ -34,5 +34,5 @@ struct TransmittanceContext {
 	ImageView lut_view;
 	vk::Sampler lut_sampler;
 
-	PipelineFactory* parent_factory;
+	Borrowed<PipelineFactory> parent_factory;
 };

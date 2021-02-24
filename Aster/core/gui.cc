@@ -18,17 +18,17 @@ namespace ImGui {
 	vk::RenderPass renderpass;
 	std::vector<vk::Framebuffer> framebuffers;
 
-	Swapchain* current_swapchain;
+	Borrowed<Swapchain> current_swapchain;
 
 	void vulkan_assert(VkResult _res) {
 		auto result = cast<vk::Result>(_res);
 		ERROR_IF(failed(result), std::fmt("Assert failed with %s", to_cstr(result))) THEN_CRASH(result);
 	}
 
-	void Init(Swapchain* _swapchain) {
+	void Init(const Borrowed<Swapchain>& _swapchain) {
 		current_swapchain = _swapchain;
 
-		Device* device_ = _swapchain->parent_device;
+		auto& device_ = current_swapchain->parent_device;
 
 		vk::Result result;
 
@@ -137,7 +137,7 @@ namespace ImGui {
 		ERROR_IF(failed(result), std::fmt("Fonts could not be loaded to GPU with %s", to_cstr(result))) THEN_CRASH(result);
 
 		framebuffers.reserve(_swapchain->image_count);
-		for (auto& iv : _swapchain->image_views) {
+		for (const auto& iv : _swapchain->image_views) {
 			tie(result, framebuffers.emplace_back()) = device_->device.createFramebuffer({
 				.renderPass = renderpass,
 				.attachmentCount = 1,
@@ -159,7 +159,7 @@ namespace ImGui {
 			current_swapchain->parent_device->device.destroyFramebuffer(fb);
 		}
 		current_swapchain->parent_device->device.destroyRenderPass(renderpass);
-		current_swapchain = nullptr;
+		current_swapchain = {};
 
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
@@ -221,7 +221,7 @@ namespace ImGui {
 
 		// DockSpace
 		if (GetIO().ConfigFlags & ImGuiConfigFlags_DockingEnable) {
-			ImGuiID dockspace_id = GetID("MyDockSpace");
+			const ImGuiID dockspace_id = GetID("MyDockSpace");
 			DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
 		}
 	}

@@ -7,24 +7,24 @@
 
 #include "optick/optick.h"
 
-SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, TransmittanceContext* _transmittance)
+SkyViewContext::SkyViewContext(const Borrowed<PipelineFactory>& _pipeline_factory, const Borrowed<TransmittanceContext>& _transmittance)
 	: parent_factory{ _pipeline_factory } {
 
 	vk::Result result;
-	auto* const device = _pipeline_factory->parent_device;
+	const auto& device = _pipeline_factory->parent_device;
 	const auto ubo_alignment = device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
 
 	tie(result, ubo) = Buffer::create("Sky View uniform buffer", device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
 	ERROR_IF(failed(result), std::fmt("Skyview UBO creation failed with %s", to_cstr(result)));
 
-	ubo_writer = BufferWriter{ &ubo };
+	ubo_writer = BufferWriter{ borrow(ubo) };
 
 	transmittance = _transmittance;
 
 	tie(result, lut) = Image::create("Sky View LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, sky_view_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
 	ERROR_IF(failed(result), std::fmt("Skyview LUT creation failed with %s", to_cstr(result)));
 
-	tie(result, lut_view) = ImageView::create(&lut, vk::ImageViewType::e2D, {
+	tie(result, lut_view) = ImageView::create( borrow(lut), vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.levelCount = 1,
 		.layerCount = 1,
@@ -62,7 +62,7 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	};
 
 	// Renderpass
-	tie(result, renderpass) = RenderPass::create("Skyview LUT pass", _pipeline_factory->parent_device, {
+	tie(result, renderpass) = RenderPass::create("Sky View LUT pass", _pipeline_factory->parent_device, {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
@@ -72,7 +72,7 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	});
 	ERROR_IF(failed(result), std::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result)));
 
-	tie(result, pipeline) = _pipeline_factory->create_pipeline({
+	tie(result, pipeline) = parent_factory->create_pipeline({
 		.renderpass = renderpass,
 		.viewport_state = {
 			.enable_dynamic = false,
@@ -246,7 +246,7 @@ void SkyViewContext::recalculate(vk::CommandBuffer _cmd) {
 }
 
 SkyViewContext::~SkyViewContext() {
-	auto* const device = parent_factory->parent_device;
+	auto& device = parent_factory->parent_device;
 	device->device.destroyDescriptorPool(descriptor_pool);
 
 	ubo.destroy();

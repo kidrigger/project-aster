@@ -5,13 +5,14 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 
 #include <core/context.h>
+#include <ownership.h>
 
 struct Window final {
 
-	Window(const std::string_view& _title, const Context* _context, vk::Extent2D _extent, b8 _full_screen = false);
+	Window(const std::string_view& _title, Borrowed<Context>&& _context, vk::Extent2D _extent, b8 _full_screen = false);
 
 	Window(const Window& _other) = delete;
 	Window(Window&& _other) noexcept;
@@ -20,11 +21,11 @@ struct Window final {
 
 	~Window();
 
-	bool should_close() noexcept {
+	bool should_close() const noexcept {
 		return glfwWindowShouldClose(window);
 	}
 
-	bool poll() noexcept {
+	bool poll() const noexcept {
 		glfwPollEvents();
 		return !glfwWindowShouldClose(window);
 	}
@@ -39,7 +40,7 @@ struct Window final {
 	}
 
 	// fields
-	const Context* parent_context{ nullptr };
+	Borrowed<Context> parent_context{};
 
 	GLFWwindow* window{ nullptr };
 	GLFWmonitor* monitor{ nullptr };

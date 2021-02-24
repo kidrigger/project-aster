@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 
 struct GlfwContext {
 	static i32 post_error() noexcept {

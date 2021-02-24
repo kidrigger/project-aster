@@ -21,6 +21,8 @@
 #include <vma/vk_mem_alloc.hpp>
 #pragma warning(pop)
 
+#include <ownership.h>
+
 [[nodiscard]]
 inline bool failed(const vk::Result _result) {
 	return _result != vk::Result::eSuccess;
@@ -85,7 +87,7 @@ inline usize hash_combine(usize _hash0, usize _hash1) {
 
 struct Time {
 	static constexpr f64 max_delta = 0.1;
-	
+
 	f64 elapsed;
 	f64 delta;
 

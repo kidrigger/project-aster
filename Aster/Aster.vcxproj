@@ -152,6 +152,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <FunctionLevelLinking>false</FunctionLevelLinking>
       <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -234,7 +235,7 @@
     <ClInclude Include="core\glfw_context.h" />
     <ClInclude Include="core\swapchain.h" />
     <ClInclude Include="core\window.h" />
-    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="ownership.h" />
     <ClInclude Include="thirdparty\imgui\imconfig.h" />
     <ClInclude Include="thirdparty\imgui\imgui.h" />
     <ClInclude Include="thirdparty\imgui\imgui_impl_glfw.h" />

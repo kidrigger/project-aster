@@ -11,8 +11,8 @@ VKAPI_ATTR b32 VKAPI_CALL Context::debug_callback(VkDebugUtilsMessageSeverityFla
 	using MessageType = vk::DebugUtilsMessageTypeFlagsEXT;
 	using MessageTypeBits = vk::DebugUtilsMessageTypeFlagBitsEXT;
 
-	auto severity = Severity(_message_severity);
-	auto message_type = MessageType(_message_type);
+	const auto severity = Severity(_message_severity);
+	const auto message_type = MessageType(_message_type);
 
 	if (message_type & MessageTypeBits::eValidation) {
 		if (severity & SeverityBits::eError)
@@ -64,7 +64,7 @@ void Context::init(const std::string_view& _app_name, const Version& _app_versio
 
 	const vk::DynamicLoader dl;
 	// ReSharper disable once CppInconsistentNaming
-	auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
+	const auto vkGetInstanceProcAddr = dl.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr");
 	VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
 
 	tie(result, instance) = vk::createInstance({

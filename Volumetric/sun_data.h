@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 
 struct SunData {
 	alignas(16) vec3 direction;

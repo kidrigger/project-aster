@@ -1,23 +1,23 @@
 ﻿// =============================================
-//  Aster: BufferWriter.h
+//  Aster: buffer_writer.h
 //  Copyright (c) 2020-2021 Anish Bhobe
 // =============================================
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 
 #include <core/device.h>
 
 class BufferWriter {
 public:
 	explicit BufferWriter() {}
-	
-	explicit BufferWriter(Buffer* _buffer) : buffer_{ _buffer }
-	                                       , parent_device_{ _buffer->parent_device } {
-		alignment_ = _buffer->parent_device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
+
+	explicit BufferWriter(Borrowed<Buffer>&& _buffer) : buffer_{ std::move(_buffer) }
+	                                                  , parent_device_{ _buffer->parent_device } {
+		alignment_ = parent_device_->physical_device_properties.limits.minUniformBufferOffsetAlignment;
 	}
-	
+
 	template <typename... Ts>
 	usize write(Ts const&... _writes) {
 		ERROR_IF(buffer_->memory_usage != vma::MemoryUsage::eCpuToGpu &&
@@ -27,11 +27,11 @@ public:
 		auto write_head = mapped_memory;
 		auto written = expand(write_to(&write_head, recast<const void*>(&_writes), sizeof(_writes))...);
 		end_mapping();
-		
+
 		return written;
 	}
 
-	
+
 	class BufferWriterOStream {
 	public:
 		explicit BufferWriterOStream(BufferWriter* _writer) : writer_{ _writer } {
@@ -60,40 +60,41 @@ public:
 		}
 
 		~BufferWriterOStream() {
-			if (writer_)
-				writer_->end_mapping();
+			if (writer_) writer_->end_mapping();
 		}
-	
+
 	private:
 		BufferWriter* writer_;
 		u8* write_head_;
 	};
 
 	template <typename T> requires std::is_trivially_copyable_v<T> && std::negation_v<std::is_pointer<T>>
-		BufferWriterOStream operator<<(T const& _data) {
-			BufferWriterOStream o_stream{ this };
-			o_stream << _data;
-			return std::move(o_stream);
-		}
+	BufferWriterOStream operator<<(T const& _data) {
+		BufferWriterOStream o_stream{ this };
+		o_stream << _data;
+		return std::move(o_stream);
+	}
 
 private:
-	Buffer* buffer_{nullptr};
-	Device* parent_device_{ nullptr };
-	usize alignment_{4};
+	Borrowed<Buffer> buffer_;
+	Borrowed<Device> parent_device_;
+	usize alignment_{ 4 };
 
-	template<typename T> requires std::is_same_v<T, usize>
+	template <typename T> requires std::is_same_v<T, usize>
 	static usize expand(T _first) {
 		return _first;
 	}
 
-	template<typename T, typename... Args> requires std::is_same_v<T, usize>
-	static usize expand(T _first, Args... _args) {
+	template <typename T, typename... Args> requires std::is_same_v<T, usize>
+	static usize expand(T _first, Args ... _args) {
 		return _first + expand(_args...);
 	}
 
-	static usize expand(...) { return 0; }
+	static usize expand(...) {
+		return 0;
+	}
 
-	usize write_to(u8** _ptr, const void* _data, const usize _size) {
+	usize write_to(u8** _ptr, const void* _data, const usize _size) const {
 		const auto to_write = closest_multiple(_size, alignment_);
 		memcpy(*_ptr, _data, _size);
 		*_ptr += to_write;

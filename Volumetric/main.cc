@@ -3,7 +3,7 @@
 //  Copyright (c) 2020-2021 Anish Bhobe
 // =============================================
 
-#include <stdafx.h>
+#include <global.h>
 #include <logger.h>
 #include <set>
 
@@ -27,13 +27,14 @@
 #include <atmosphere_info.h>
 #include <transmittance_context.h>
 #include <sky_view_context.h>
+#include <ownership.h>
 
 i32 aster_main() {
 
 	g_logger.set_minimum_logging_level(Logger::LogType::eDebug);
 	GlfwContext glfw{};
-	Context context{ "Aster Core", { 0, 0, 1 } };
-	Window window{ PROJECT_NAME, &context, { 1280u, 720u } };
+	Owned<Context> context = new Context{ "Aster Core", { 0, 0, 1 } };
+	Owned<Window> window = new Window{ PROJECT_NAME, context.borrow(), { 1280u, 720u } };
 
 	vk::PhysicalDeviceFeatures enabled_device_features = {
 		.depthClamp = true,
@@ -43,9 +44,9 @@ i32 aster_main() {
 
 #pragma region Device Selection
 	using DInfo = Device::PhysicalDeviceInfo;
-	auto physical_device_info = DeviceSelector{ &context, &window }.select_on([](DInfo& _inf) {
+	auto physical_device_info = DeviceSelector{ context.borrow(), window.borrow() }.select_on([](DInfo& _inf) {
 		return _inf.queue_family_indices.has_graphics() && _inf.queue_family_indices.has_present();
-	}).select_on([_context = &context](DInfo& _inf) {
+	}).select_on([_context = context.borrow()](DInfo& _inf) {
 		auto [result, extension_properties] = _inf.device.enumerateDeviceExtensionProperties();
 		std::vector<std::string> extensions(extension_properties.size());
 		std::ranges::transform(extension_properties, extensions.begin(), [](vk::ExtensionProperties& _ext) {
@@ -55,7 +56,7 @@ i32 aster_main() {
 		return std::ranges::all_of(_context->device_extensions, [&extension_set](auto& _ext) {
 			return extension_set.contains(_ext);
 		});
-	}).select_on([_window = &window](DInfo& _inf) {
+	}).select_on([_window = window.borrow()](DInfo& _inf) {
 		auto [result0, surface_formats] = _inf.device.getSurfaceFormatsKHR(_window->surface);
 		if (failed(result0) || surface_formats.empty()) return false;
 
@@ -91,13 +92,13 @@ i32 aster_main() {
 
 	INFO(std::fmt("Using %s", physical_device_info.properties.deviceName.data()));
 
-	Device device{ "Primary", &context, physical_device_info, enabled_device_features };
-	Swapchain swapchain{ window.name, &window, &device };
-	Camera camera{ { 0.0f, 1000.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, window.extent, 0.1f, 30.0f, 70_deg };
-	CameraController camera_controller{ &window, &camera, 10000.0f };
-	PipelineFactory pipeline_factory{ &device };
+	Owned<Device> device = new Device{ "Primary", context.borrow(), physical_device_info, enabled_device_features };
+	Owned<Swapchain> swapchain = new Swapchain{ window->name, window.borrow(), device.borrow() };
+	Camera camera{ { 0.0f, 1000.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, window->extent, 0.1f, 30.0f, 70_deg };
+	CameraController camera_controller{ window.borrow(), borrow(camera), 10000.0f };
+	Owned<PipelineFactory> pipeline_factory = new PipelineFactory{ device.borrow() };
 
-	Gui::Init(&swapchain);
+	Gui::Init(swapchain.borrow());
 
 	rdoc::init();
 
@@ -107,7 +108,7 @@ i32 aster_main() {
 	std::vector<vk::Framebuffer> framebuffers;
 
 	vk::AttachmentDescription attach_desc = {
-		.format = swapchain.format,
+		.format = swapchain->format,
 		.loadOp = vk::AttachmentLoadOp::eClear,
 		.storeOp = vk::AttachmentStoreOp::eStore,
 		.stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
@@ -137,7 +138,7 @@ i32 aster_main() {
 	};
 
 	// Render pass
-	tie(result, render_pass) = RenderPass::create("Triangle Draw Pass", &device, {
+	tie(result, render_pass) = RenderPass::create("Triangle Draw Pass", device.borrow(), {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
@@ -151,17 +152,17 @@ i32 aster_main() {
 		[&render_pass, &device, &framebuffers, &swapchain]() {
 			vk::Result result_;
 			for (auto& fb : framebuffers) {
-				device.device.destroyFramebuffer(fb);
+				device->device.destroyFramebuffer(fb);
 			}
-			framebuffers.resize(swapchain.image_count);
+			framebuffers.resize(swapchain->image_count);
 
-			for (u32 i = 0; i < swapchain.image_count; ++i) {
-				tie(result_, framebuffers[i]) = device.device.createFramebuffer({
+			for (u32 i = 0; i < swapchain->image_count; ++i) {
+				tie(result_, framebuffers[i]) = device->device.createFramebuffer({
 					.renderPass = render_pass.renderpass,
 					.attachmentCount = 1,
-					.pAttachments = &swapchain.image_views[i],
-					.width = swapchain.extent.width,
-					.height = swapchain.extent.height,
+					.pAttachments = &swapchain->image_views[i],
+					.width = swapchain->extent.width,
+					.height = swapchain->extent.height,
 					.layers = 1,
 				});
 				ERROR_IF(failed(result_), std::fmt("Framebuffer creation failed with %s", to_cstr(result_))) THEN_CRASH(result_) ELSE_INFO("Framebuffer Created");
@@ -171,7 +172,7 @@ i32 aster_main() {
 
 	recreate_framebuffers();
 
-	tie(result, pipeline) = pipeline_factory.create_pipeline({
+	tie(result, pipeline) = pipeline_factory->create_pipeline({
 		.renderpass = render_pass,
 		.viewport_state = {
 			.enable_dynamic = true,
@@ -185,29 +186,29 @@ i32 aster_main() {
 	std::vector<vk::DescriptorPoolSize> pool_sizes = {
 		{
 			.type = vk::DescriptorType::eUniformBuffer,
-			.descriptorCount = swapchain.image_count * 3,
+			.descriptorCount = swapchain->image_count * 3,
 		},
 		{
 			.type = vk::DescriptorType::eCombinedImageSampler,
-			.descriptorCount = swapchain.image_count
+			.descriptorCount = swapchain->image_count
 		},
 		{
 			.type = vk::DescriptorType::eSampledImage,
-			.descriptorCount = swapchain.image_count
+			.descriptorCount = swapchain->image_count
 		}
 	};
 
 	vk::DescriptorPool descriptor_pool;
-	tie(result, descriptor_pool) = device.device.createDescriptorPool({
-		.maxSets = swapchain.image_count,
+	tie(result, descriptor_pool) = device->device.createDescriptorPool({
+		.maxSets = swapchain->image_count,
 		.poolSizeCount = cast<u32>(pool_sizes.size()),
 		.pPoolSizes = pool_sizes.data(),
 	});
 
 	std::vector<vk::DescriptorSet> descriptor_sets;
 	{
-		std::vector<vk::DescriptorSetLayout> layouts(swapchain.image_count, pipeline->layout->descriptor_set_layouts.front());
-		tie(result, descriptor_sets) = device.device.allocateDescriptorSets({
+		std::vector<vk::DescriptorSetLayout> layouts(swapchain->image_count, pipeline->layout->descriptor_set_layouts.front());
+		tie(result, descriptor_sets) = device->device.allocateDescriptorSets({
 			.descriptorPool = descriptor_pool,
 			.descriptorSetCount = cast<u32>(layouts.size()),
 			.pSetLayouts = layouts.data(),
@@ -222,9 +223,9 @@ i32 aster_main() {
 		vk::CommandPool command_pool;
 		vk::CommandBuffer command_buffer;
 
-		const Device* parent_device{};
+		Borrowed<Device> parent_device{};
 
-		void init(Device* _device, u32 _frame_index) {
+		void init(Borrowed<Device>&& _device, u32 _frame_index) {
 			parent_device = _device;
 			vk::Result result;
 
@@ -265,13 +266,13 @@ i32 aster_main() {
 		}
 	};
 
-	std::vector<Frame> frames(swapchain.image_count);
+	std::vector<Frame> frames(swapchain->image_count);
 	u32 i_ = 0;
 	for (auto& frame : frames) {
-		frame.init(&device, i_++);
+		frame.init(device.borrow(), i_++);
 	}
 	std::vector<Frame*> in_flight_frames;
-	in_flight_frames.reserve(swapchain.image_count);
+	in_flight_frames.reserve(swapchain->image_count);
 	for (auto& frame : frames) {
 		in_flight_frames.push_back(&frame);
 	}
@@ -297,19 +298,19 @@ i32 aster_main() {
 
 #pragma region ======== LUT Setup ==================================================================================================================
 
-	TransmittanceContext transmittance{ &pipeline_factory, atmosphere_info };
+	Owned<TransmittanceContext> transmittance = new TransmittanceContext{ pipeline_factory.borrow(), atmosphere_info };
 
-	SkyViewContext sky_view{ &pipeline_factory, &transmittance };
+	Owned<SkyViewContext> sky_view = new SkyViewContext{ pipeline_factory.borrow(), transmittance.borrow() };
 
 #pragma endregion
 
 	// ======== Buffer Setup ==================================================================================================================
 	std::vector<Buffer> uniform_buffers;
-	const auto ubo_alignment = device.physical_device_properties.limits.minUniformBufferOffsetAlignment;
-	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		tie(result, uniform_buffers.emplace_back()) = Buffer::create(std::fmt("Camera Ubo %i", i), &device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
+	const auto ubo_alignment = device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
+	for (u32 i = 0; i < swapchain->image_count; ++i) {
+		tie(result, uniform_buffers.emplace_back()) = Buffer::create(std::fmt("Camera Ubo %i", i), device.borrow(), closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
 		{
-			BufferWriter{&uniform_buffers.back()} << camera << sun << atmosphere_info;
+			BufferWriter{ borrow(&uniform_buffers.back()) } << camera << sun << atmosphere_info;
 
 			std::vector<vk::DescriptorBufferInfo> buf_info = {
 				{
@@ -330,52 +331,57 @@ i32 aster_main() {
 			};
 
 			vk::DescriptorImageInfo transmittance_image_info = {
-				.sampler = transmittance.lut_sampler,
-				.imageView = transmittance.lut_view.image_view,
+				.sampler = transmittance->lut_sampler,
+				.imageView = transmittance->lut_view.image_view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
 
 			vk::DescriptorImageInfo sky_view_image_info = {
-				.imageView = sky_view.lut_view.image_view,
+				.imageView = sky_view->lut_view.image_view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
 
-			device.device.updateDescriptorSets({ {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 0,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[0],
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 1,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[1],
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 2,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[2],
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 3,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-				.pImageInfo = &transmittance_image_info,
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 4,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eSampledImage,
-				.pImageInfo = &sky_view_image_info,
-			} }, {});
+			device->device.updateDescriptorSets({
+				{
+					.dstSet = descriptor_sets[i],
+					.dstBinding = 0,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eUniformBuffer,
+					.pBufferInfo = &buf_info[0],
+				},
+				{
+					.dstSet = descriptor_sets[i],
+					.dstBinding = 1,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eUniformBuffer,
+					.pBufferInfo = &buf_info[1],
+				},
+				{
+					.dstSet = descriptor_sets[i],
+					.dstBinding = 2,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eUniformBuffer,
+					.pBufferInfo = &buf_info[2],
+				},
+				{
+					.dstSet = descriptor_sets[i],
+					.dstBinding = 3,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eCombinedImageSampler,
+					.pImageInfo = &transmittance_image_info,
+				},
+				{
+					.dstSet = descriptor_sets[i],
+					.dstBinding = 4,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = vk::DescriptorType::eSampledImage,
+					.pImageInfo = &sky_view_image_info,
+				} }, {});
 		}
 	}
 
@@ -400,7 +406,7 @@ i32 aster_main() {
 	f32 hrs_per_second = 0.4f;
 	g_time.init();
 
-	while (window.poll()) {
+	while (window->poll()) {
 
 		OPTICK_FRAME("Main frame");
 		u32 image_idx;
@@ -410,16 +416,16 @@ i32 aster_main() {
 
 		{
 			OPTICK_EVENT("Frame wait");
-			result = device.device.waitForFences({ current_frame->in_flight_fence }, true, max_value<u64>);
+			result = device->device.waitForFences({ current_frame->in_flight_fence }, true, max_value<u64>);
 		}
 
 		{
 			OPTICK_EVENT("Acquire");
 
-			tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, current_frame->image_available_sem, {});
+			tie(result, image_idx) = device->device.acquireNextImageKHR(swapchain->swapchain, max_value<u32>, current_frame->image_available_sem, {});
 
-			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain.name.data()))
-			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
+			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain->name.data()))
+			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain->name) DO(swapchain->recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
 			ELSE_IF_ERROR(failed(result), std::fmt("Image acquire failed with %s", to_cstr(result))) THEN_CRASH(result)
 			ELSE_VERBOSE("Image Acquired");
 		}
@@ -472,7 +478,7 @@ i32 aster_main() {
 				Gui::InputInt("Depth Samples", &atmosphere_info.depth_samples, 10, 100);
 				Gui::InputInt("View Samples", &atmosphere_info.view_samples, 1, 10);
 				if (Gui::Button("Recalculate Transmittance")) {
-					transmittance.recalculate(&pipeline_factory, atmosphere_info);
+					transmittance->recalculate(atmosphere_info);
 				}
 			}
 
@@ -487,7 +493,7 @@ i32 aster_main() {
 
 		{
 			OPTICK_EVENT("Image wait");
-			result = device.device.waitForFences({ in_flight_frames[image_idx]->in_flight_fence }, true, max_value<u64>);
+			result = device->device.waitForFences({ in_flight_frames[image_idx]->in_flight_fence }, true, max_value<u64>);
 			ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
 			in_flight_frames[image_idx] = current_frame;
 		}
@@ -501,23 +507,23 @@ i32 aster_main() {
 			memcpy(buf_data.data(), &camera, sizeof(Camera));
 			memcpy(buf_data.data() + closest_multiple(sizeof(Camera), ubo_alignment), &sun, sizeof(SunData));                                                                       // TODO Fix hardcode
 			memcpy(buf_data.data() + closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment), &atmosphere_info, sizeof(AtmosphereInfo)); // TODO Fix hardcode
-			device.update_data(&uniform_buffers[frame_idx], std::span<u8>(buf_data.data(), buf_data.size()));
+			device->update_data(&uniform_buffers[frame_idx], std::span<u8>(buf_data.data(), buf_data.size()));
 		}
 
-		sky_view.update(camera, sun, atmosphere_info);
+		sky_view->update(camera, sun, atmosphere_info);
 
 		// ======== Record Commands ==================================================================================================================
 
 		{
 			OPTICK_EVENT("Reset Command Pool");
-			device.device.resetCommandPool(current_frame->command_pool, {});
+			device->device.resetCommandPool(current_frame->command_pool, {});
 		}
 		auto& cmd = current_frame->command_buffer;
 
 		result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
 		ERROR_IF(failed(result), std::fmt("Cmd Buffer begin failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Start Cmd Buffer");
 
-		sky_view.recalculate(cmd);
+		sky_view->recalculate(cmd);
 
 		vk::ClearValue clear_val(std::array{ 0.0f, 0.0f, 0.0f, 1.0f });
 
@@ -531,7 +537,7 @@ i32 aster_main() {
 			.framebuffer = framebuffers[image_idx],
 			.renderArea = {
 				.offset = { 0, 0 },
-				.extent = swapchain.extent,
+				.extent = swapchain->extent,
 			},
 			.clearValueCount = 1,
 			.pClearValues = &clear_val,
@@ -540,16 +546,16 @@ i32 aster_main() {
 		cmd.setViewport(0, {
 			{
 				.x = 0,
-				.y = cast<f32>(swapchain.extent.height),
-				.width = cast<f32>(swapchain.extent.width),
-				.height = -cast<f32>(swapchain.extent.height),
+				.y = cast<f32>(swapchain->extent.height),
+				.width = cast<f32>(swapchain->extent.width),
+				.height = -cast<f32>(swapchain->extent.height),
 				.minDepth = 0.0f,
 				.maxDepth = 1.0f,
 			} });
 		cmd.setScissor(0, {
 			{
 				.offset = { 0, 0 },
-				.extent = swapchain.extent,
+				.extent = swapchain->extent,
 			} });
 
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->pipeline);
@@ -567,7 +573,7 @@ i32 aster_main() {
 
 		vk::PipelineStageFlags wait_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
 
-		result = device.device.resetFences({ current_frame->in_flight_fence });
+		result = device->device.resetFences({ current_frame->in_flight_fence });
 		ERROR_IF(failed(result), std::fmt("Fence reset failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Reset");
 
 		{
@@ -581,30 +587,30 @@ i32 aster_main() {
 				.signalSemaphoreCount = 1,
 				.pSignalSemaphores = &current_frame->render_finished_sem,
 			};
-			result = device.queues.graphics.submit({ submit_info }, current_frame->in_flight_fence);
+			result = device->queues.graphics.submit({ submit_info }, current_frame->in_flight_fence);
 
 			ERROR_IF(failed(result), std::fmt("Submission failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Submit");
 		}
 
 		{
 			OPTICK_EVENT("Present");
-			result = device.queues.present.presentKHR({
+			result = device->queues.present.presentKHR({
 				.waitSemaphoreCount = 1,
 				.pWaitSemaphores = &current_frame->render_finished_sem,
 				.swapchainCount = 1,
-				.pSwapchains = &swapchain.swapchain,
+				.pSwapchains = &swapchain->swapchain,
 				.pImageIndices = &image_idx,
 			});
-			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain.name.data()))
-			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
+			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain->name.data()))
+			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain->name) DO(swapchain->recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
 			ELSE_IF_ERROR(failed(result), std::fmt("Present failed with %s", to_cstr(result))) THEN_CRASH(result)
 			ELSE_VERBOSE("Present");
 		}
 
-		frame_idx = (frame_idx + 1) % swapchain.image_count;
+		frame_idx = (frame_idx + 1) % swapchain->image_count;
 	}
 
-	result = device.device.waitIdle();
+	result = device->device.waitIdle();
 	ERROR_IF(failed(result), std::fmt("Idling failed with %s", to_cstr(result)));
 
 	// ======== Cleanup ==================================================================================================================
@@ -613,15 +619,15 @@ i32 aster_main() {
 		frame.destroy();
 	}
 
-	for (auto& buf : uniform_buffers) {
-		buf.destroy();
+	for (auto& ubo_ : uniform_buffers) {
+		ubo_.destroy();
 	}
 
-	device.device.destroyDescriptorPool(descriptor_pool);
+	device->device.destroyDescriptorPool(descriptor_pool);
 
 	pipeline->destroy();
 	for (auto& framebuffer_ : framebuffers) {
-		device.device.destroyFramebuffer(framebuffer_);
+		device->device.destroyFramebuffer(framebuffer_);
 	}
 	render_pass.destroy();
 

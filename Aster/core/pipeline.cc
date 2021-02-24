@@ -353,7 +353,7 @@ vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 	std::vector<vk::DescriptorSetLayoutBinding> bindings;
 	u32 current_set = _shader_info.descriptors.front().set;
 
-	for (auto& dsi_ : _shader_info.descriptors) {
+	for (const auto& dsi_ : _shader_info.descriptors) {
 		bindings.push_back({
 			.binding = dsi_.binding,
 			.descriptorType = dsi_.type,
@@ -422,7 +422,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 
 	Shader* vertex_shader = nullptr;
 	Shader* fragment_shader = nullptr;
-	for (auto& shader_ : _shaders) {
+	for (const auto& shader_ : _shaders) {
 		if (shader_->stage.stage == vk::ShaderStageFlagBits::eVertex) {
 			vertex_shader = shader_;
 		}
@@ -436,7 +436,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 	};
 
 	std::vector<DescriptorInfo> descriptors;
-	for (auto& shader_ : _shaders) {
+	for (const auto& shader_ : _shaders) {
 		for (auto& descriptor_ : shader_->info.descriptors) {
 			auto find_d = std::ranges::lower_bound(descriptors, descriptor_, descriptor_info_lt);
 			if (find_d != descriptors.end()) {
@@ -465,7 +465,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 	u32 offset = max_value<u32>;
 	u32 end_offset = min_value<u32>;
 	vk::ShaderStageFlags stage = {};
-	for (auto& shader_ : _shaders) {
+	for (const auto& shader_ : _shaders) {
 		for (auto& pcr_ : shader_->info.push_ranges) {
 			offset = std::min(pcr_.offset, offset);
 			end_offset = std::max(pcr_.offset + pcr_.size, end_offset);
@@ -540,7 +540,7 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 
 	std::vector<vk::VertexInputAttributeDescription> input_attributes(pipeline_layout->layout_info.input_vars.size());
 	for (auto& ivs : pipeline_layout->layout_info.input_vars) {
-		auto& in_attr = _create_info.vertex_input.attributes;
+		const auto& in_attr = _create_info.vertex_input.attributes;
 		auto match_iv = std::ranges::find_if(in_attr, [&_name = ivs.name](auto& _ia) {
 			return _ia.attr_name == _name;
 		});
@@ -644,7 +644,7 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 	return vk::ResultValue(result, &pipeline_);
 };
 
-usize std::hash<ShaderInfo>::operator()(const ShaderInfo& _val) noexcept {
+usize std::hash<ShaderInfo>::operator()(const ShaderInfo& _val) const noexcept {
 	usize hash_ = 0;
 	for (const auto& ds_ : _val.descriptors) {
 		hash_ = hash_combine(hash_, hash_any(ds_));
@@ -657,7 +657,7 @@ usize std::hash<ShaderInfo>::operator()(const ShaderInfo& _val) noexcept {
 	return hash_;
 }
 
-usize std::hash<DescriptorInfo>::operator()(const DescriptorInfo& _val) noexcept {
+usize std::hash<DescriptorInfo>::operator()(const DescriptorInfo& _val) const noexcept {
 	auto hash_ = hash_any(_val.type);
 	hash_ = hash_combine(hash_, hash_any(_val.set));
 	hash_ = hash_combine(hash_, hash_any(_val.binding));
@@ -667,7 +667,7 @@ usize std::hash<DescriptorInfo>::operator()(const DescriptorInfo& _val) noexcept
 	return hash_;
 }
 
-usize std::hash<PipelineCreateInfo>::operator()(const PipelineCreateInfo& _value) noexcept {
+usize std::hash<PipelineCreateInfo>::operator()(const PipelineCreateInfo& _value) const noexcept {
 	auto hash_val = hash_any(_value.renderpass.attachment_format);
 	{
 		// vertex input

@@ -5,18 +5,18 @@
 
 #pragma once
 
-#include <stdafx.h>
+#include <global.h>
 
 struct Camera {
-	mat4 projection;
-	mat4 view;
+	mat4 projection{};
+	mat4 view{};
 
 	vec3 position;
 	f32 near_plane;
 	vec3 direction;
 	f32 far_plane;
 	vec2 screen_size;
-	f32 fov;
+	f32 vertical_fov;
 private:
 	f32 pad_{};
 public:
@@ -27,21 +27,21 @@ public:
 		, direction{ _direction }
 		, far_plane{ _far_plane }
 		, screen_size{ _screen_size.width, _screen_size.height }
-		, fov{ _vertical_fov } {
-		projection = glm::perspective(fov, screen_size.x / screen_size.y, near_plane, far_plane);
+		, vertical_fov{ _vertical_fov } {
+		projection = glm::perspective(vertical_fov, screen_size.x / screen_size.y, near_plane, far_plane);
 		view = lookAt(position, direction + position, vec3(0, 1, 0));
 	}
 
 	void update() {
 		direction = normalize(direction);
-		projection = glm::perspective(fov, screen_size.x / screen_size.y, near_plane, far_plane);
+		projection = glm::perspective(vertical_fov, screen_size.x / screen_size.y, near_plane, far_plane);
 		view = lookAt(position, direction + position, vec3(0, 1, 0));
 	}
 };
 
 struct CameraController {
-	Window* window;
-	Camera* camera;
+	Borrowed<Window> window;
+	Borrowed<Camera> camera;
 
 	f32 speed;
 
@@ -61,15 +61,13 @@ struct CameraController {
 
 	Mode mode{ Mode::eCursor };
 
-	CameraController(Window* _window, Camera* _camera, const f32 _speed) : window{ _window }
-	                                                                     , camera{ _camera }
-	                                                                     , speed{ _speed } {
+	CameraController(Borrowed<Window>&& _window, Borrowed<Camera>&& _camera, const f32 _speed) : window{ std::move(_window) }
+	                                                                                           , camera{ std::move(_camera) }
+	                                                                                           , speed{ _speed } {
 		glfwGetCursorPos(window->window, &prev_x, &prev_y);
 	}
 
 	void update() {
-		ERROR_IF(camera == nullptr, "Camera is nullptr, using outside init-destroy");
-
 		vec3 up{ 0, 1, 0 };
 		const auto right = normalize(cross(up, camera->direction));
 		up = cross(camera->direction, right);

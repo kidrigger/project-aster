@@ -80,7 +80,7 @@ struct CameraController {
 
 		const auto len = length(move_dir);
 		if (len > 0) {
-			camera->position += move_dir * speed * cast<f32>(g_time.delta) / len;
+			camera->position += move_dir * speed * cast<f32>(Time::delta) / len;
 		}
 
 		if (glfwGetMouseButton(window->window, GLFW_MOUSE_BUTTON_2)) {

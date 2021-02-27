@@ -16,8 +16,6 @@
 // NOTE: Vulkan Dispatch Loader Storage - Should only appear once.
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
-Time g_time = Time();
-
 //int Vsnprintf8(char* pDestination, size_t n, const char* pFormat, va_list arguments) {
 //	//ERROR_IF(pDestination == nullptr, "Null buffer") THEN_CRASH(1) ELSE_IF_ERROR(n == 0, "Empty buffer") THEN_CRASH(1);
 //#ifdef _MSC_VER

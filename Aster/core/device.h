@@ -9,6 +9,7 @@
 #include <iterator>
 #include <core/context.h>
 #include <core/window.h>
+#include <core/buffer.h>
 
 #include <span>
 #include <string_view>
@@ -51,54 +52,6 @@ struct Queues {
 	Option<vk::Queue> compute;
 };
 
-struct Buffer {
-	Borrowed<Device> parent_device;
-	vk::Buffer buffer;
-	vma::Allocation allocation;
-	vk::BufferUsageFlags usage;
-	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
-	usize size = 0;
-	std::string name;
-
-	/*Buffer(const Borrowed<Device>& _parent_device, const vk::Buffer& _buffer, const vma::Allocation& _allocation, const vk::BufferUsageFlags& _usage, vma::MemoryUsage _memory_usage, usize _size, const std::string& _name)
-		: parent_device{ _parent_device }
-		, buffer(_buffer)
-		, allocation(_allocation)
-		, usage(_usage)
-		, memory_usage(_memory_usage)
-		, size(_size)
-		, name(_name) {}
-
-	Buffer(const Buffer& _other) = delete;
-
-	Buffer(Buffer&& _other) noexcept
-		: parent_device{ std::move(_other.parent_device) }
-		, buffer{ _other.buffer }
-		, allocation{ _other.allocation }
-		, usage{ _other.usage }
-		, memory_usage{ _other.memory_usage }
-		, size{ _other.size }
-		, name{ std::move(_other.name) } {}
-
-	Buffer& operator=(const Buffer& _other) = delete;
-
-	Buffer& operator=(Buffer&& _other) noexcept {
-		if (this == &_other) return *this;
-		parent_device = std::move(_other.parent_device);
-		buffer = _other.buffer;
-		allocation = _other.allocation;
-		usage = _other.usage;
-		memory_usage = _other.memory_usage;
-		size = _other.size;
-		name = std::move(_other.name);
-		return *this;
-	}*/
-
-	static vk::ResultValue<Buffer> create(const std::string& _name, const Borrowed<Device>& _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
-
-	void destroy();
-};
-
 struct Image {
 	Borrowed<Device> parent_device;
 	vk::Image image;
@@ -114,9 +67,61 @@ struct Image {
 	u32 layer_count;
 	u32 mip_count;
 
-	static vk::ResultValue<Image> create(const std::string_view& _name, const Borrowed<Device>& _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
+	Image() = default;
 
-	void destroy();
+	Image(const Borrowed<Device>& _parent_device, const vk::Image& _image, const vma::Allocation& _allocation, const vk::ImageUsageFlags& _usage, vma::MemoryUsage _memory_usage, usize _size, const std::string& _name, vk::ImageType _type, vk::Format _format, const vk::Extent3D& _extent, u32 _layer_count, u32 _mip_count)
+		: parent_device(_parent_device)
+		, image(_image)
+		, allocation(_allocation)
+		, usage(_usage)
+		, memory_usage(_memory_usage)
+		, size(_size)
+		, name(_name)
+		, type(_type)
+		, format(_format)
+		, extent(_extent)
+		, layer_count(_layer_count)
+		, mip_count(_mip_count) {}
+
+
+	Image(const Image& _other) = delete;
+
+	Image(Image&& _other) noexcept
+		: parent_device{ std::move(_other.parent_device) }
+		, image{ std::exchange(_other.image, nullptr) }
+		, allocation{ std::exchange(_other.allocation, nullptr) }
+		, usage{ _other.usage }
+		, memory_usage{ _other.memory_usage }
+		, size{ _other.size }
+		, name{ std::move(_other.name) }
+		, type{ _other.type }
+		, format{ _other.format }
+		, extent{ _other.extent }
+		, layer_count{ _other.layer_count }
+		, mip_count{ _other.mip_count } {}
+
+	Image& operator=(const Image& _other) = delete;
+
+	Image& operator=(Image&& _other) noexcept {
+		if (this == &_other) return *this;
+		std::swap(parent_device, _other.parent_device);
+		std::swap(image, _other.image);
+		std::swap(allocation, _other.allocation);
+		usage = _other.usage;
+		memory_usage = _other.memory_usage;
+		size = _other.size;
+		name = std::move(_other.name);
+		type = _other.type;
+		format = _other.format;
+		extent = _other.extent;
+		layer_count = _other.layer_count;
+		mip_count = _other.mip_count;
+		return *this;
+	}
+
+	static Res<Image> create(const std::string_view& _name, const Borrowed<Device>& _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
+
+	~Image();
 };
 
 struct ImageView {
@@ -127,9 +132,43 @@ struct ImageView {
 	vk::ImageSubresourceRange subresource_range;
 	std::string name;
 
-	static vk::ResultValue<ImageView> create(const Borrowed<Image>& _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
+	ImageView() = default;
 
-	void destroy() const;
+	ImageView(const Borrowed<Image>& _parent_image, const vk::ImageView& _image_view, vk::Format _format, vk::ImageViewType _type, const vk::ImageSubresourceRange& _subresource_range, const std::string& _name)
+		: parent_image(_parent_image)
+		, image_view(_image_view)
+		, format(_format)
+		, type(_type)
+		, subresource_range(_subresource_range)
+		, name(_name) {}
+
+
+	ImageView(const ImageView& _other) = delete;
+
+	ImageView(ImageView&& _other) noexcept
+		: parent_image{ std::move(_other.parent_image) }
+		, image_view{ std::exchange(_other.image_view, nullptr) }
+		, format{ _other.format }
+		, type{ _other.type }
+		, subresource_range{ _other.subresource_range }
+		, name{ std::move(_other.name) } {}
+
+	ImageView& operator=(const ImageView& _other) = delete;
+
+	ImageView& operator=(ImageView&& _other) noexcept {
+		if (this == &_other) return *this;
+		std::swap(parent_image, _other.parent_image);
+		std::swap(image_view, _other.image_view);
+		format = _other.format;
+		type = _other.type;
+		subresource_range = _other.subresource_range;
+		name = std::move(_other.name);
+		return *this;
+	}
+
+	static Res<ImageView> create(const Borrowed<Image>& _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
+
+	~ImageView();
 };
 
 template <typename T>
@@ -140,28 +179,39 @@ struct Device {
 		vk::PhysicalDevice device;
 		vk::PhysicalDeviceProperties properties;
 		vk::PhysicalDeviceFeatures features;
-		QueueFamilyIndices queue_family_indices;
+		QueueFamilyIndices queue_families;
 
 		PhysicalDeviceInfo(const Borrowed<Window>& _window, const vk::PhysicalDevice _device) : device(_device) {
 			properties = device.getProperties();
 			features = device.getFeatures();
-			queue_family_indices = get_queue_families(_window, device);
+			queue_families = get_queue_families(_window, device);
 		}
 
 	private:
-		QueueFamilyIndices get_queue_families(const Borrowed<Window>& _window, vk::PhysicalDevice _device) const;
+		[[nodiscard]] QueueFamilyIndices get_queue_families(const Borrowed<Window>& _window, vk::PhysicalDevice _device) const;
 	};
 
-	Device(const std::string_view& _name, Borrowed<Context>&& _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features);
+
+	Device(const std::string_view& _name, const Borrowed<Context>& _parent_context, PhysicalDeviceInfo _physical_device_info, const vk::Device& _device, const Queues& _queues, const vma::Allocator& _allocator, const vk::CommandPool& _transfer_cmd_pool, const vk::CommandPool& _graphics_cmd_pool)
+		: parent_context(_parent_context)
+		, physical_device(std::move(_physical_device_info))
+		, device(_device)
+		, queues(_queues)
+		, allocator(_allocator)
+		, transfer_cmd_pool(_transfer_cmd_pool)
+		, graphics_cmd_pool(_graphics_cmd_pool)
+		, name(_name) {}
 
 	Device(const Device& _other) = delete;
 	Device(Device&& _other) noexcept;
 	Device& operator=(const Device& _other) = delete;
 	Device& operator=(Device&& _other) noexcept;
 
+	static Res<Device> create(const std::string_view& _name, Borrowed<Context>&& _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features);
+
 	~Device();
 
-	template <typename T>
+	template <typename T> requires vk::isVulkanHandleType<T>::value
 	void set_object_name(const T& _obj, const std::string_view& _name) const {
 		auto result = device.setDebugUtilsObjectNameEXT({
 			.objectType = _obj.objectType,
@@ -171,26 +221,16 @@ struct Device {
 		WARN_IF(failed(result), "Debug Utils name setting failed with "s + to_string(result));
 	}
 
-	vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) const {
-		vk::CommandBuffer cmd;
-		vk::CommandBufferAllocateInfo cmd_buf_alloc_info = {
-			.commandPool = _pool,
-			.level = vk::CommandBufferLevel::ePrimary,
-			.commandBufferCount = 1,
-		};
-		const auto result = device.allocateCommandBuffers(&cmd_buf_alloc_info, &cmd);
-		return vk::ResultValue<vk::CommandBuffer>(result, cmd);
-	}
+	[[nodiscard]]
+	Res<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) const;
 
-	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const std::span<u8>& _data);
-	void update_data(Buffer* _host_buffer, const std::span<u8>& _data) const;
+	[[nodiscard]] Res<SubmitTask<Buffer>> upload_data(const Borrowed<Buffer>& _host_buffer, Buffer&& _staging_buffer);
+	[[nodiscard]] Res<SubmitTask<Buffer>> upload_data(const Borrowed<Buffer>& _host_buffer, const std::span<u8>& _data);
+	Res<> update_data(const Borrowed<Buffer>& _host_buffer, const std::span<u8>& _data) const;
 
 	// fields
 	Borrowed<Context> parent_context;
-	vk::PhysicalDevice physical_device;
-	vk::PhysicalDeviceProperties physical_device_properties;
-	vk::PhysicalDeviceFeatures physical_device_features;
-	QueueFamilyIndices queue_families;
+	PhysicalDeviceInfo physical_device;
 	vk::Device device;
 	Queues queues;
 	vma::Allocator allocator;
@@ -201,29 +241,41 @@ struct Device {
 	std::string name;
 
 private:
-	void set_name(const std::string& _name);
+	void set_name(const std::string_view& _name);
 };
 
-template <typename T>
+template <typename T = void>
 struct SubmitTask {
 	vk::Fence fence;
 	Borrowed<Device> device{};
-	Owned<T> payload;
+	T payload;
 	std::vector<vk::CommandBuffer> cmd;
 	vk::CommandPool pool;
 
-	SubmitTask() = default;
+	[[nodiscard]]
+	static Res<SubmitTask<T>> create(const Borrowed<Device>& _device, T&& _payload, vk::Queue _queue, vk::CommandPool _pool, const std::vector<vk::CommandBuffer>& _cmd, const std::vector<vk::Semaphore>& _wait_on = {}, const std::vector<vk::Semaphore>& _signal_to = {}) {
 
-	vk::Result submit(const Borrowed<Device>& _device, Owned<T>&& _payload, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {}, std::vector<vk::Semaphore> _signal_to = {}) {
+		SubmitTask<T> task;
+		if (auto res = task.submit(_device, std::forward<T>(_payload), _queue, _pool, _cmd, _wait_on, _signal_to)) {
+			return std::move(task);
+		} else {
+			return Err::make(std::move(res.error()));
+		}
+	}
+
+	[[nodiscard]]
+	Res<> submit(const Borrowed<Device>& _device, T&& _payload, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {}, std::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
-		ERROR_IF(failed(result), std::fmt("Fence creation failed with %s", to_cstr(result)));
+		if (failed(result)) {
+			return Err::make(std::fmt("Fence creation failed with %s" CODE_LOC, to_cstr(result)), result);
+		}
 		fence = _fence;
 		payload = std::move(_payload);
 		cmd = _cmd;
 		pool = _pool;
 
-		return _queue.submit({
+		result = _queue.submit({
 				{
 					.waitSemaphoreCount = cast<u32>(_wait_on.size()),
 					.pWaitSemaphores = _wait_on.data(),
@@ -234,18 +286,25 @@ struct SubmitTask {
 				}
 			},
 			_fence);
+		if (failed(result)) {
+			return Err::make(std::fmt("Submit failed with %s" CODE_LOC, to_cstr(result)), result);
+		}
+
+		return {};
 	}
 
-	[[nodiscard]] vk::Result wait() {
+	[[nodiscard]]
+	Res<> wait_and_destroy() {
 		return this->destroy();
 	}
 
-	[[nodiscard]] vk::Result destroy() {
+	[[nodiscard]]
+	Res<> destroy() {
 		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
-		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result)));
+		if (failed(result)) return Err::make(std::fmt("Fence wait failed with %s" CODE_LOC, to_cstr(result)), result);
 		device->device.destroyFence(fence);
 		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
-		return result;
+		return {};
 	}
 };
 
@@ -256,15 +315,44 @@ struct SubmitTask<void> {
 	std::vector<vk::CommandBuffer> cmd;
 	vk::CommandPool pool;
 
-	[[nodiscard]] vk::Result submit(const Borrowed<Device>& _device, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {},
-	                                const vk::PipelineStageFlags& _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, std::vector<vk::Semaphore> _signal_to = {}) {
+	[[nodiscard]]
+	static Res<SubmitTask<>> create(const Borrowed<Device>& _device, vk::Queue _queue, vk::CommandPool _pool, const std::vector<vk::CommandBuffer>& _cmd, const std::vector<vk::Semaphore>& _wait_on = {}, const vk::PipelineStageFlags& _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, const std::vector<vk::Semaphore>& _signal_to = {}) {
+
+		SubmitTask<> task;
+		if (auto res = task.submit(_device, _queue, _pool, _cmd, _wait_on, _wait_stage, _signal_to)) {
+			return std::move(task);
+		} else {
+			return Err::make(std::move(res.error()));
+		}
+	}
+
+	[[nodiscard]]
+	Res<> wait_and_destroy() {
+		return this->destroy();
+	}
+
+	[[nodiscard]]
+	Res<> destroy() {
+		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+		if (failed(result)) return Err::make(std::fmt("Fence wait failed with %s", to_cstr(result)), result);
+		device->device.destroyFence(fence);
+		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
+		return {};
+	}
+
+private:
+	[[nodiscard]]
+	Res<> submit(const Borrowed<Device>& _device, vk::Queue _queue, vk::CommandPool _pool, std::vector<vk::CommandBuffer> _cmd, std::vector<vk::Semaphore> _wait_on = {},
+	             const vk::PipelineStageFlags& _wait_stage = vk::PipelineStageFlagBits::eBottomOfPipe, std::vector<vk::Semaphore> _signal_to = {}) {
 		device = _device;
 		auto [result, _fence] = device->device.createFence({});
-		ERROR_IF(failed(result), std::fmt("Fence creation failed with %s", to_cstr(result)));
+		if (failed(result)) {
+			return Err::make(std::fmt("Fence creation failed with %s" CODE_LOC, to_cstr(result)), result);
+		}
 		fence = _fence;
 		cmd = _cmd;
 		pool = _pool;
-		return _queue.submit({
+		result = _queue.submit({
 				vk::SubmitInfo{
 					.waitSemaphoreCount = cast<u32>(_wait_on.size()),
 					.pWaitSemaphores = _wait_on.data(),
@@ -275,18 +363,11 @@ struct SubmitTask<void> {
 					.pSignalSemaphores = _signal_to.data(),
 				} },
 			_fence);
-	}
+		if (failed(result)) {
+			return Err::make(std::fmt("Submit failed with %s" CODE_LOC, to_cstr(result)), result);
+		}
 
-	[[nodiscard]] vk::Result wait_and_destroy() {
-		return this->destroy();
-	}
-
-	[[nodiscard]] vk::Result destroy() {
-		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
-		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result)));
-		device->device.destroyFence(fence);
-		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
-		return result;
+		return {};
 	}
 };
 
@@ -315,6 +396,7 @@ public:
 			return DeviceSelectorIntermediate{ device_set_ };
 		}
 
+		[[nodiscard]]
 		PhysicalDeviceInfo get(const u32 _idx = 0) const {
 			ERROR_IF(_idx >= device_set_.size(), "Out of range");
 			return device_set_[_idx];

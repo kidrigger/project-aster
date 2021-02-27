@@ -11,20 +11,54 @@
 
 class BufferWriter {
 public:
-	explicit BufferWriter() {}
+	explicit BufferWriter() = default;
 
-	explicit BufferWriter(Borrowed<Buffer>&& _buffer) : buffer_{ std::move(_buffer) }
-	                                                  , parent_device_{ _buffer->parent_device } {
-		alignment_ = parent_device_->physical_device_properties.limits.minUniformBufferOffsetAlignment;
+	explicit BufferWriter(const Borrowed<Buffer>& _buffer) : buffer_{ _buffer }
+	                                                       , parent_device_{ _buffer->parent_device } {
+		alignment_ = parent_device_->physical_device.properties.limits.minUniformBufferOffsetAlignment;
+	}
+
+	BufferWriter(const BufferWriter& _other)
+		: buffer_{ _other.buffer_ }
+		, parent_device_{ _other.parent_device_ }
+		, alignment_{ _other.alignment_ } {}
+
+	BufferWriter(BufferWriter&& _other) noexcept
+		: buffer_{ std::move(_other.buffer_) }
+		, parent_device_{ std::move(_other.parent_device_) }
+		, alignment_{ _other.alignment_ } {}
+
+	BufferWriter& operator=(const BufferWriter& _other) {
+		if (this == &_other) return *this;
+		buffer_ = _other.buffer_;
+		parent_device_ = _other.parent_device_;
+		alignment_ = _other.alignment_;
+		return *this;
+	}
+
+	BufferWriter& operator=(BufferWriter&& _other) noexcept {
+		if (this == &_other) return *this;
+		buffer_ = std::move(_other.buffer_);
+		parent_device_ = std::move(_other.parent_device_);
+		alignment_ = _other.alignment_;
+		return *this;
+	}
+
+	~BufferWriter() {
+		buffer_ = {};
+		parent_device_ = {};
 	}
 
 	template <typename... Ts>
-	usize write(Ts const&... _writes) {
+	Res<usize> write(Ts const&... _writes) {
 		ERROR_IF(buffer_->memory_usage != vma::MemoryUsage::eCpuToGpu &&
 			buffer_->memory_usage != vma::MemoryUsage::eCpuOnly, "Memory is not on CPU so mapping can't be done. Use upload_data");
 
-		const auto mapped_memory = begin_mapping();
-		auto write_head = mapped_memory;
+		auto mapped_memory = begin_mapping();
+		if (!mapped_memory) {
+			return Err::make("Memory mapping failed" CODE_LOC, std::move(mapped_memory.error()));
+		}
+		auto write_head = mapped_memory.value();
 		auto written = expand(write_to(&write_head, recast<const void*>(&_writes), sizeof(_writes))...);
 		end_mapping();
 
@@ -35,7 +69,9 @@ public:
 	class BufferWriterOStream {
 	public:
 		explicit BufferWriterOStream(BufferWriter* _writer) : writer_{ _writer } {
-			write_head_ = writer_->begin_mapping();
+			auto head = writer_->begin_mapping();
+			ERROR_IF(!head, std::fmt("Could not map memory" CODE_LOC "\n|> ", head.error().what())) THEN_CRASH(head.error().code());
+			write_head_ = head.value();
 		}
 
 		BufferWriterOStream(const BufferWriterOStream& _other) = delete;
@@ -101,11 +137,12 @@ private:
 		return to_write;
 	}
 
-	u8* begin_mapping() {
-		auto [result, mapped_memory] = parent_device_->allocator.mapMemory(buffer_->allocation);
-		ERROR_IF(failed(result), std::fmt("Memory mapping failed with %s", to_cstr(result))) THEN_CRASH(result);
-
-		return cast<u8*>(mapped_memory);
+	Res<u8*> begin_mapping() {
+		if (auto res = parent_device_->allocator.mapMemory(buffer_->allocation); failed(res.result)) {
+			return Err::make(std::fmt("Memory mapping failed with %s" CODE_LOC, to_cstr(res.result)), res.result);
+		} else {
+			return cast<u8*>(res.value);
+		}
 	}
 
 	void end_mapping() {

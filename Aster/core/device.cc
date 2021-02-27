@@ -12,15 +12,31 @@
 #include <map>
 #include <set>
 
-Device::Device(const std::string_view& _name, Borrowed<Context>&& _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features)
-	: parent_context{ std::move(_context) }
-	, name{ _name } {
-	vk::Result result;
+Device::Device(Device&& _other) noexcept: parent_context{ std::move(_other.parent_context) }
+                                        , physical_device{ _other.physical_device }
+                                        , device{ std::exchange(_other.device, nullptr) }
+                                        , queues{ _other.queues }
+                                        , allocator{ std::exchange(_other.allocator, nullptr) }
+                                        , transfer_cmd_pool{ std::exchange(_other.transfer_cmd_pool, nullptr) }
+                                        , graphics_cmd_pool{ std::exchange(_other.graphics_cmd_pool, nullptr) }
+                                        , name{ std::move(_other.name) } {}
 
-	physical_device = _physical_device_info.device;
-	physical_device_features = _physical_device_info.features;
-	physical_device_properties = _physical_device_info.properties;
-	queue_families = _physical_device_info.queue_family_indices;
+Device& Device::operator=(Device&& _other) noexcept {
+	if (this == &_other) return *this;
+	parent_context = std::move(_other.parent_context);
+	physical_device = _other.physical_device;
+	device = std::exchange(_other.device, nullptr);
+	queues = _other.queues;
+	allocator = std::exchange(_other.allocator, nullptr);
+	transfer_cmd_pool = std::exchange(_other.transfer_cmd_pool, nullptr);
+	graphics_cmd_pool = std::exchange(_other.graphics_cmd_pool, nullptr);
+	name = std::move(_other.name);
+	return *this;
+}
+
+Res<Device> Device::create(const std::string_view& _name, Borrowed<Context>&& _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features) {
+	const auto& physical_device = _physical_device_info.device;
+	const auto& queue_families = _physical_device_info.queue_families;
 
 	// Logical Device
 	std::map<u32, u16> unique_queue_families;
@@ -39,6 +55,8 @@ Device::Device(const std::string_view& _name, Borrowed<Context>&& _context, cons
 		});
 	}
 
+	vk::Result result;
+	vk::Device device;
 	tie(result, device) = physical_device.createDevice({
 		.queueCreateInfoCount = cast<u32>(queue_create_infos.size()),
 		.pQueueCreateInfos = queue_create_infos.data(),
@@ -48,8 +66,27 @@ Device::Device(const std::string_view& _name, Borrowed<Context>&& _context, cons
 		.ppEnabledExtensionNames = _context->device_extensions.data(),
 		.pEnabledFeatures = &_enabled_features,
 	});
-	ERROR_IF(failed(result), "Failed to create a logical device with "s + to_string(result)) THEN_CRASH(result) ELSE_INFO("Logical Device Created!");
+	if (failed(result)) {
+		return Err::make(std::fmt("Failed to create a logical device with %s" CODE_LOC, to_cstr(result)), result);
+	}
 
+	INFO("Logical Device Created!");
+
+	vma::Allocator allocator;
+	std::tie(result, allocator) = vma::createAllocator({
+		.physicalDevice = physical_device,
+		.device = device,
+		.instance = _context->instance,
+	});
+	if (failed(result)) {
+		device.destroy();
+		return Err::make(std::fmt("Memory allocator creation failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
+	VERBOSE("Memory Allocator Created");
+
+	INFO(std::fmt("Created Device '%s' Successfully", _name.data()));
+
+	Queues queues;
 	// Setup queues
 	{
 		u32 compute_idx = --unique_queue_families[queue_families.compute_idx];
@@ -67,58 +104,47 @@ Device::Device(const std::string_view& _name, Borrowed<Context>&& _context, cons
 		INFO(std::fmt("Compute Queue Index: (%i, %i)", queue_families.compute_idx, compute_idx));
 	}
 
-	tie(result, allocator) = vma::createAllocator({
-		.physicalDevice = physical_device,
-		.device = device,
-		.instance = _context->instance,
-	});
-	ERROR_IF(failed(result), std::fmt("Memory allocator creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Memory Allocator Created");
-
-	set_name(name);
-
-	INFO(std::fmt("Created Device '%s' Successfully", name.data()));
-
+	vk::CommandPool transfer_cmd_pool;
 	tie(result, transfer_cmd_pool) = device.createCommandPool({
 		.flags = vk::CommandPoolCreateFlagBits::eTransient,
 		.queueFamilyIndex = queue_families.transfer_idx,
 	});
-	ERROR_IF(failed(result), std::fmt("Transfer command pool creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Transfer Command Pool Created");
-	set_object_name(transfer_cmd_pool, "Async transfer command pool");
+	if (failed(result)) {
+		allocator.destroy();
+		device.destroy();
+		return Err::make(std::fmt("Transfer command pool creation failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
+	VERBOSE("Transfer Command Pool Created");
 
+	vk::CommandPool graphics_cmd_pool;
 	tie(result, graphics_cmd_pool) = device.createCommandPool({
 		.flags = vk::CommandPoolCreateFlagBits::eTransient | vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
 		.queueFamilyIndex = queue_families.graphics_idx,
 	});
-	ERROR_IF(failed(result), std::fmt("Graphics command pool creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Graphics Command Pool Created");
-	set_object_name(graphics_cmd_pool, "Single use Graphics command pool");
-}
+	if (failed(result)) {
+		device.destroyCommandPool(transfer_cmd_pool);
+		allocator.destroy();
+		device.destroy();
+		return Err::make(std::fmt("Graphics command pool creation failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
+	VERBOSE("Graphics Command Pool Created");
 
-Device::Device(Device&& _other) noexcept: parent_context{ std::move(_other.parent_context) }
-                                        , physical_device{ std::exchange(_other.physical_device, nullptr) }
-                                        , physical_device_properties{ _other.physical_device_properties }
-                                        , physical_device_features{ _other.physical_device_features }
-                                        , queue_families{ _other.queue_families }
-                                        , device{ std::exchange(_other.device, nullptr) }
-                                        , queues{ _other.queues }
-                                        , allocator{ std::exchange(_other.allocator, nullptr) }
-                                        , transfer_cmd_pool{ std::exchange(_other.transfer_cmd_pool, nullptr) }
-                                        , graphics_cmd_pool{ std::exchange(_other.graphics_cmd_pool, nullptr) }
-                                        , name{ std::move(_other.name) } {}
+	Device final_device{
+		_name,
+		_context,
+		_physical_device_info,
+		device,
+		queues,
+		allocator,
+		transfer_cmd_pool,
+		graphics_cmd_pool
+	};
 
-Device& Device::operator=(Device&& _other) noexcept {
-	if (this == &_other) return *this;
-	parent_context = std::move(_other.parent_context);
-	physical_device = std::exchange(_other.physical_device, nullptr);
-	physical_device_properties = _other.physical_device_properties;
-	physical_device_features = _other.physical_device_features;
-	queue_families = _other.queue_families;
-	device = std::exchange(_other.device, nullptr);
-	queues = _other.queues;
-	allocator = std::exchange(_other.allocator, nullptr);
-	transfer_cmd_pool = std::exchange(_other.transfer_cmd_pool, nullptr);
-	graphics_cmd_pool = std::exchange(_other.graphics_cmd_pool, nullptr);
-	name = std::move(_other.name);
-	return *this;
+	final_device.set_name(_name);
+	final_device.set_object_name(transfer_cmd_pool, "Async transfer command pool");
+	final_device.set_object_name(graphics_cmd_pool, "Single use Graphics command pool");
+
+	return std::move(final_device);
 }
 
 Device::~Device() {
@@ -130,14 +156,24 @@ Device::~Device() {
 	INFO("Device '" + name + "' Destroyed");
 }
 
-SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>& _data) {
+Res<vk::CommandBuffer> Device::alloc_temp_command_buffer(vk::CommandPool _pool) const {
+	vk::CommandBuffer cmd;
+	vk::CommandBufferAllocateInfo cmd_buf_alloc_info = {
+		.commandPool = _pool,
+		.level = vk::CommandBufferLevel::ePrimary,
+		.commandBufferCount = 1,
+	};
+	if (const auto result = device.allocateCommandBuffers(&cmd_buf_alloc_info, &cmd); failed(result)) {
+		return Err::make(std::fmt("Temp Command buffer allocation failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
+	return cmd;
+}
+
+Res<SubmitTask<Buffer>> Device::upload_data(const Borrowed<Buffer>& _host_buffer, Buffer&& _staging_buffer) {
 	ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), std::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.data()))
-	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, std::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()));
-
-	auto [result, staging_buffer] = Buffer::create("_stage " + _host_buffer->name, borrow(this), _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly);
-	ERROR_IF(failed(result), std::fmt("Staging buffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
-
-	update_data(&staging_buffer, _data);
+	ELSE_IF_ERROR(!(_staging_buffer.usage & vk::BufferUsageFlagBits::eTransferSrc), std::fmt("Buffer %s is not a transfer src. Use vk::BufferUsageFlagBits::eTransferSrc during creation", _staging_buffer.name.data()))
+	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, std::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()))
+	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly, std::fmt("Memory %s is not CPU only. Staging should ideally be a CPU only buffer", _staging_buffer.name.data()));
 
 	vk::CommandBuffer cmd;
 	vk::CommandBufferAllocateInfo allocate_info = {
@@ -146,44 +182,67 @@ SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>
 		.commandBufferCount = 1,
 	};
 
-	result = device.allocateCommandBuffers(&allocate_info, &cmd);
+	auto result = device.allocateCommandBuffers(&allocate_info, &cmd);
+	if (failed(result)) {
+		return Err::make(std::fmt("Transfer command pool allocation failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
 	set_object_name(cmd, std::fmt("%s transfer command", _host_buffer->name.data()));
-	ERROR_IF(failed(result), std::fmt("Transfer command pool allocation failed with %s", to_cstr(result))) THEN_CRASH(result);
 
 	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
-	ERROR_IF(failed(result), std::fmt("Command buffer begin failed with %s", to_cstr(result)));
+	if (failed(result)) {
+		return Err::make(std::fmt("Command buffer begin failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
 
-	cmd.copyBuffer(staging_buffer.buffer, _host_buffer->buffer, {
+	cmd.copyBuffer(_staging_buffer.buffer, _host_buffer->buffer, {
 		{
 			.srcOffset = 0,
 			.dstOffset = 0,
-			.size = cast<u32>(_data.size())
+			.size = cast<u32>(_staging_buffer.size)
 		} });
 	result = cmd.end();
-	ERROR_IF(failed(result), std::fmt("Command buffer end failed with %s", to_cstr(result)));
+	if (failed(result)) {
+		return Err::make(std::fmt("Command buffer end failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
 
-	SubmitTask<Buffer> handle;
-	result = handle.submit(borrow(this), new Buffer{ std::move(staging_buffer) }, queues.transfer, transfer_cmd_pool, { cmd });
-	ERROR_IF(failed(result), std::fmt("Submit failed with %s", to_cstr(result))) THEN_CRASH(result);
-
-	return handle;
+	return SubmitTask<Buffer>::create(borrow(this), std::move(_staging_buffer), queues.transfer, transfer_cmd_pool, { cmd });
 }
 
-void Device::update_data(Buffer* _host_buffer, const std::span<u8>& _data) const {
+Res<SubmitTask<Buffer>> Device::upload_data(const Borrowed<Buffer>& _host_buffer, const std::span<u8>& _data) {
+	ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), std::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.data()))
+	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, std::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()));
 
-	ERROR_IF(_host_buffer->memory_usage != vma::MemoryUsage::eCpuToGpu &&
-		_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly, "Memory is not on CPU so mapping can't be done. Use upload_data");
+	if (auto res = Buffer::create("_stage " + _host_buffer->name, borrow(this), _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly)) {
+		return Err::make("Staging buffer creation failed", std::move(res.error()));
+	} else {
+		if (auto result = update_data(borrow(res.value()), _data)) {
+			return upload_data(_host_buffer, std::move(res.value()));
+		} else {
+			return Err::make(std::move(result.error()));
+		}
+	}
+}
+
+Res<> Device::update_data(const Borrowed<Buffer>& _host_buffer, const std::span<u8>& _data) const {
+
+	if (_host_buffer->memory_usage != vma::MemoryUsage::eCpuToGpu &&
+		_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly) {
+		return Err::make("Memory is not on CPU so mapping can't be done. Use upload_data" CODE_LOC);
+	}
 
 	auto [result, mapped_memory] = allocator.mapMemory(_host_buffer->allocation);
-	ERROR_IF(failed(result), std::fmt("Memory mapping failed with %s", to_cstr(result))) THEN_CRASH(result);
+	if (failed(result)) {
+		return Err::make(std::fmt("Memory mapping failed with %s" CODE_LOC, to_cstr(result)), result);
+	}
 	memcpy(mapped_memory, _data.data(), _data.size());
 	allocator.unmapMemory(_host_buffer->allocation);
+
+	return {};
 }
 
-void Device::set_name(const std::string& _name) {
+void Device::set_name(const std::string_view& _name) {
 	VERBOSE(std::fmt("Device %s -> %s", name.data(), _name.data()));
 	name = _name;
-	set_object_name(physical_device, std::fmt("%s GPU", _name.data()));
+	set_object_name(physical_device.device, std::fmt("%s GPU", _name.data()));
 	set_object_name(device, std::fmt("%s Device", _name.data()));
 }
 
@@ -245,35 +304,7 @@ QueueFamilyIndices DeviceSelector::PhysicalDeviceInfo::get_queue_families(const 
 	return indices;
 }
 
-vk::ResultValue<Buffer> Buffer::create(const std::string& _name, const Borrowed<Device>& _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
-	auto [result, buffer] = _device->allocator.createBuffer({
-		.size = _size,
-		.usage = _usage,
-		.sharingMode = vk::SharingMode::eExclusive,
-	}, {
-		.usage = _memory_usage,
-	});
-
-	if (!failed(result)) {
-		_device->set_object_name(buffer.first, _name);
-	}
-
-	return vk::ResultValue<Buffer>(result, {
-		_device,
-		buffer.first,
-		buffer.second,
-		_usage,
-		_memory_usage,
-		_size,
-		_name,
-	});
-}
-
-void Buffer::destroy() {
-	parent_device->allocator.destroyBuffer(buffer, allocation);
-}
-
-vk::ResultValue<Image> Image::create(const std::string_view& _name, const Borrowed<Device>& _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count, vma::MemoryUsage _memory_usage, u32 _layer_count) {
+Res<Image> Image::create(const std::string_view& _name, const Borrowed<Device>& _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count, vma::MemoryUsage _memory_usage, u32 _layer_count) {
 
 	auto [result, image] = _device->allocator.createImage({
 		.imageType = _image_type,
@@ -290,30 +321,35 @@ vk::ResultValue<Image> Image::create(const std::string_view& _name, const Borrow
 		.usage = _memory_usage,
 	});
 
-	if (!failed(result)) {
-		_device->set_object_name(image.first, _name);
+	if (failed(result)) {
+		return Err::make(std::fmt("Image %s creation failed with %s" CODE_LOC, _name.data(), to_cstr(result)), result);
 	}
 
-	return vk::ResultValue<Image>(result, {
-		.parent_device = _device,
-		.image = image.first,
-		.allocation = image.second,
-		.usage = _usage,
-		.memory_usage = _memory_usage,
-		.name = std::string{_name},
-		.type = _image_type,
-		.format = _format,
-		.extent = _extent,
-		.layer_count = _layer_count,
-		.mip_count = _mip_count,
-	});
+	_device->set_object_name(image.first, _name);
+
+	return Image{
+		_device,
+		image.first,
+		image.second,
+		_usage,
+		_memory_usage,
+		0,
+		std::string{ _name },
+		_image_type,
+		_format,
+		_extent,
+		_layer_count,
+		_mip_count,
+	};
 }
 
-void Image::destroy() {
-	parent_device->allocator.destroyImage(image, allocation);
+Image::~Image() {
+	if (image) {
+		parent_device->allocator.destroyImage(image, allocation);
+	}
 }
 
-vk::ResultValue<ImageView> ImageView::create(const Borrowed<Image>& _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range) {
+Res<ImageView> ImageView::create(const Borrowed<Image>& _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range) {
 
 	auto [result, image_view] = _image->parent_device->device.createImageView({
 		.image = _image->image,
@@ -322,22 +358,25 @@ vk::ResultValue<ImageView> ImageView::create(const Borrowed<Image>& _image, vk::
 		.subresourceRange = _subresource_range,
 	});
 
-	const auto name = std::fmt("%s view", _image->name.c_str());
-
-	if (!failed(result)) {
-		_image->parent_device->set_object_name(image_view, name);
+	if (failed(result)) {
+		return Err::make(std::fmt("ImageView '%s view' creation failed with %s" CODE_LOC, _image->name.c_str(), to_cstr(result)), result);
 	}
 
-	return vk::ResultValue<ImageView>(result, {
-		.parent_image = _image,
-		.image_view = image_view,
-		.format = _image->format,
-		.type = _image_type,
-		.subresource_range = _subresource_range,
-		.name = name
-	});
+	const auto name = std::fmt("%s view", _image->name.c_str());
+	_image->parent_device->set_object_name(image_view, name);
+
+	return ImageView{
+		_image,
+		image_view,
+		_image->format,
+		_image_type,
+		_subresource_range,
+		name
+	};
 }
 
-void ImageView::destroy() const {
-	parent_image->parent_device->device.destroyImageView(image_view);
+ImageView::~ImageView() {
+	if (image_view) {
+		parent_image->parent_device->device.destroyImageView(image_view);
+	}
 }

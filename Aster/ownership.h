@@ -327,14 +327,14 @@ private:
 };
 
 template <typename T>
-concept HasBorrow = requires (T _t) {
+concept HasBorrow = requires(T _t) {
 	{ T::handle_type };
 	{ _t.borrow() } -> std::same_as<Borrowed<typename T::handle_type>>;
 };
 
 template <typename T> requires HasBorrow<T>
 [[nodiscard]]
-auto borrow(T& _borrowable) {
+auto borrow(T& _borrowable) requires HasBorrow<T> {
 	return _borrowable.borrow();
 }
 
@@ -346,6 +346,6 @@ Borrowed<T> borrow(T* const& _ptr) {
 
 template <typename T> requires (!HasBorrow<T>) && std::negation_v<std::is_pointer<T>>
 [[nodiscard]]
-auto borrow(T& _ref) {
+auto borrow(T& _ref) requires !HasBorrow<T> {
 	return borrow(&_ref);
 }

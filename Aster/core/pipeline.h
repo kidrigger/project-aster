@@ -136,6 +136,7 @@ namespace std {
 
 struct ShaderInfo {
 	std::string name;
+	vk::ShaderStageFlagBits stage;
 	std::vector<InterfaceVariableInfo> input_vars;
 	std::vector<InterfaceVariableInfo> output_vars;
 	std::map<std::string, u32> descriptor_names;
@@ -160,7 +161,7 @@ struct Shader {
 
 struct PipelineCreateInfo {
 
-	RenderPass renderpass;
+	Borrowed<RenderPass> renderpass;
 
 	struct InputAttribute {
 		std::string_view attr_name;
@@ -262,17 +263,18 @@ public:
 
 	~PipelineFactory();
 
-	vk::ResultValue<Pipeline*> create_pipeline(const PipelineCreateInfo& _create_info);
+	Res<Pipeline*> create_pipeline(const PipelineCreateInfo& _create_info);
 
 private:
 	void destroy_pipeline(Pipeline* _pipeline) noexcept;
 
-	vk::ResultValue<Shader*> create_shader_module(const std::string_view& _name);
-	vk::ResultValue<std::vector<Shader*>> create_shaders(const std::vector<std::string_view>& _names);
+	Res<ShaderInfo> get_shader_reflection_info(const std::string_view& _name, const std::vector<u32>& _code) const;
+	Res<Shader*> create_shader_module(const std::string_view& _name);
+	Res<std::vector<Shader*>> create_shaders(const std::vector<std::string_view>& _names);
 	void destroy_shader_module(Shader* _shader) noexcept;
 
-	vk::ResultValue<std::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
-	vk::ResultValue<Layout*> create_pipeline_layout(const std::vector<Shader*>& _shaders);
+	Res<std::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
+	Res<Layout*> create_pipeline_layout(const std::vector<Shader*>& _shaders);
 	void destroy_pipeline_layout(Layout* _layout) noexcept;
 
 	// Fields

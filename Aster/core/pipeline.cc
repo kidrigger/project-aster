@@ -41,49 +41,202 @@ inline b8 spv_failed(SpvReflectResult _result) {
 	return _result != SPV_REFLECT_RESULT_SUCCESS;
 }
 
-vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string_view& _name) {
+Res<Shader*> PipelineFactory::create_shader_module(const std::string_view& _name) {
 
-	usize hash_key = hash_any(_name);
+	auto hash_key = hash_any(_name);
 	if (shader_map_.contains(hash_key)) {
-		auto& entry = shader_map_[hash_key];
-		entry.first++;
+		auto& [count, shader] = shader_map_[hash_key];
+		count++;
 		DEBUG(std::fmt("Using cached shader %s", _name.data()));
-		return vk::ResultValue<Shader*>(vk::Result::eSuccess, &entry.second);
+		return &shader;
 	}
 	DEBUG(std::fmt("Creating new shader %s", _name.data()));
 
-	b8 found = file_exists(_name);
-	ERROR_IF(!found, std::fmt("Shader '%s' not found.", _name.data()));
-	if (!found) {
-		return vk::ResultValue<Shader*>(vk::Result::eIncomplete, nullptr);
+	if (!file_exists(_name)) {
+		return Err::make(std::fmt("Shader '%s' not found." CODE_LOC, _name.data()));
 	}
 
 	auto code = load_binary32_file(_name);
-	b8 empty = code.empty();
-	ERROR_IF(empty, std::fmt("Shader '%s' is empty.", _name.data()));
-	if (empty) {
-		return vk::ResultValue<Shader*>(vk::Result::eIncomplete, nullptr);
+	if (code.empty()) {
+		return Err::make(std::fmt("Shader '%s' is empty." CODE_LOC, _name.data()));
 	}
 
-	auto spv_ext_idx = _name.find_last_of('.');
-	auto spv_ext = _name.substr(spv_ext_idx);
+	const auto spv_ext_idx = _name.find_last_of('.');
+	const auto spv_ext = _name.substr(spv_ext_idx);
 	WARN_IF(spv_ext != ".spv"sv, std::fmt("Shader '%s' has extension '%s' instead of '.spv'", _name.data(), spv_ext.data()));
-	auto shader_ext_idx = _name.substr(0, spv_ext_idx).find_last_of('.');
-	auto shader_ext = _name.substr(shader_ext_idx, spv_ext_idx - shader_ext_idx);
 
-	spv_reflect::ShaderModule reflector(code);
-	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	auto shader_info = get_shader_reflection_info(_name, code);
+	if (!shader_info) {
+		return Err::make(std::fmt("Shader '%s' reflection failed." CODE_LOC, _name.data()), std::move(shader_info.error()));
+	}
+
+	// Module creation
+	auto [result, shader] = parent_device->device.createShaderModule({
+		.codeSize = sizeof(u32) * code.size(),
+		.pCode = code.data(),
+	});
+	if (failed(result)) {
+		return Err::make(std::fmt("Shader '%s' creation failed with %s" CODE_LOC, _name.data(), to_cstr(result)), result);
+	}
+	parent_device->set_object_name(shader, _name);
+
+	auto& val = shader_map_[hash_key] = {
+		1u,
+		Shader{
+			.stage = {
+				.stage = cast<vk::ShaderStageFlagBits>(shader_info->stage),
+				.shaderModule = shader,
+				.pName = "main",
+			},
+			.info = shader_info.value(),
+			.program_hash = hash_key,
+			.layout_hash = hash_any(shader_info.value()),
+		}
+	};
+
+	return &val.second;
+}
+
+void PipelineFactory::destroy_shader_module(Shader* _shader) noexcept {
+	const auto hash_key = hash_any(_shader->info.name);
+	const auto found = shader_map_.contains(hash_key);
+	ERROR_IF(!found, std::fmt("Destroy called on unexisting shader %s", _shader->info.name.c_str()));
+
+	if (found && 0 == --shader_map_[hash_key].first) {
+		DEBUG(std::fmt("Deleting cached shader %s", _shader->info.name.data()));
+		parent_device->device.destroyShaderModule(_shader->stage.shaderModule);
+		shader_map_.erase(hash_key);
+	}
+}
+
+Res<std::vector<Shader*>> PipelineFactory::create_shaders(const std::vector<std::string_view>& _names) {
+	std::vector<Shader*> shaders;
+	shaders.reserve(_names.size());
+
+	auto cleanup_shaders = [this, &shaders] {
+		for (auto& shader_ : shaders) {
+			this->destroy_shader_module(shader_);
+		}
+	};
+
+	for (const auto& name : _names) {
+		auto res = create_shader_module(name);
+		if (!res) {
+			cleanup_shaders();
+			return Err::make(std::fmt("Shader %s creation failed." CODE_LOC, name.data()), std::move(res.error()));
+		}
+		shaders.emplace_back(res.value());
+	}
+
+	/*
+	 * TODO:
+	 * Change supported to support the rest
+	 */
+
+	// Check if given shader combos are supported
+	constexpr auto supported = [](const vk::ShaderStageFlags& _flags) {
+		if (_flags & (vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)) {
+			return true;
+		}
+		return false;
+	};
+
+	Shader* vertex_shader = nullptr;
+	Shader* fragment_shader = nullptr;
+
+	vk::ShaderStageFlags used_stages;
+	for (auto& stage_ : shaders) {
+		if (stage_->stage.stage == vk::ShaderStageFlagBits::eVertex) vertex_shader = stage_;
+		else if (stage_->stage.stage == vk::ShaderStageFlagBits::eFragment) fragment_shader = stage_;
+		used_stages |= stage_->stage.stage;
+		WARN_IF(!supported(stage_->stage.stage), std::fmt("%s Shader unsupported", to_string(stage_->stage.stage).c_str()));
+	}
+
+	if ((used_stages & vk::ShaderStageFlagBits::eAllGraphics) && (used_stages & vk::ShaderStageFlagBits::eCompute)) {
+		cleanup_shaders();
+		return Err::make("Compute and Graphics stages can't be used in same pipeline." CODE_LOC);
+	}
+
+	if (vertex_shader != nullptr && fragment_shader != nullptr) {
+
+		WARN_IF(vertex_shader->info.output_vars.size() != fragment_shader->info.input_vars.size(), std::fmt("%s outputs don't map to %s Inputs 1:1 (%lu vs %lu)", vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
+		auto vertex_out = vertex_shader->info.output_vars.begin();
+		const auto vertex_out_end = vertex_shader->info.output_vars.end();
+		auto fragment_input = fragment_shader->info.input_vars.begin();
+
+		for (; vertex_out != vertex_out_end; ++vertex_out, ++fragment_input) {
+			if (*fragment_input != *vertex_out) {
+				cleanup_shaders();
+				return Err::make(std::fmt("%s output does not match %s inputs" CODE_LOC, vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
+			}
+		}
+	} else if (vertex_shader != nullptr || fragment_shader != nullptr) {
+		// TODO: Add compute shader logic
+		cleanup_shaders();
+		return Err::make("Vertex shader and Fragment shader must both exist" CODE_LOC);
+	}
+
+	return std::move(shaders);
+}
+
+void PipelineFactory::destroy_pipeline_layout(Layout* _layout) noexcept {
+	const auto hash_key = _layout->hash;
+	const auto found = layout_map_.contains(hash_key);
+	ERROR_IF(!found, std::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
+
+	try {
+		if (found && 0 == --layout_map_[hash_key].first) {
+			DEBUG(std::fmt("Deleting cached layout %s", _layout->layout_info.name.data()));
+			parent_device->device.destroyPipelineLayout(_layout->layout);
+			for (auto& dsl_ : _layout->descriptor_set_layouts) {
+				parent_device->device.destroyDescriptorSetLayout(dsl_);
+			}
+			layout_map_.erase(hash_key);
+		}
+	} catch (std::exception& e) {
+		ERROR(e.what());
+	}
+}
+
+void PipelineFactory::destroy_pipeline(Pipeline* _pipeline) noexcept {
+	const auto hash_key = _pipeline->hash;
+	const auto& found = pipeline_map_.contains(hash_key);
+	ERROR_IF(!found, std::fmt("Destroy called on unexisting pipeline %s", _pipeline->name.c_str()));
+	try {
+		if (found && 0 >= --pipeline_map_[hash_key].first) {
+			DEBUG(std::fmt("Deleting cached pipeline %s", _pipeline->name.data()));
+			for (auto& shader_ : _pipeline->shaders) {
+				this->destroy_shader_module(shader_);
+			}
+			this->destroy_pipeline_layout(_pipeline->layout);
+			parent_device->device.destroyPipeline(_pipeline->pipeline);
+			layout_map_.erase(hash_key);
+		}
+	} catch (std::exception& e) {
+		ERROR(e.what());
+	}
+}
+
+Res<ShaderInfo> PipelineFactory::get_shader_reflection_info(const std::string_view& _name, const std::vector<u32>& _code) const {
+	spv_reflect::ShaderModule reflector(_code);
+	if (auto result = reflector.GetResult(); spv_failed(result)) {
+		return Err::make(std::fmt("Spirv reflection failed with %s" CODE_LOC, to_cstr(result)));
+	}
 
 	u32 set_count;
 	reflector.EnumerateDescriptorSets(&set_count, nullptr);
-	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	if (auto result = reflector.GetResult(); spv_failed(result)) {
+		return Err::make(std::fmt("Spirv reflection descriptor set enumeration failed with %s" CODE_LOC, to_cstr(result)));
+	}
 
 	std::map<std::string, u32> descriptor_names;
 	std::vector<DescriptorInfo> descriptors;
 	if (set_count > 0) {
 		std::vector<SpvReflectDescriptorSet*> sets(set_count, nullptr);
 		reflector.EnumerateDescriptorSets(&set_count, sets.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		if (auto result = reflector.GetResult(); spv_failed(result)) {
+			return Err::make(std::fmt("Spirv reflection descriptor set enumeration failed with %s" CODE_LOC, to_cstr(result)));
+		}
 
 		std::map<std::pair<u32, u32>, DescriptorInfo> uniforms;
 		for (auto* set_ : sets) {
@@ -131,12 +284,16 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 	std::vector<InterfaceVariableInfo> input_variables;
 	u32 input_variable_count;
 	reflector.EnumerateInputVariables(&input_variable_count, nullptr);
-	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	if (auto result = reflector.GetResult(); spv_failed(result)) {
+		return Err::make(std::fmt("Spirv reflection input variable enumeration failed with %s" CODE_LOC, to_cstr(result)));
+	}
 
 	if (input_variable_count) {
 		std::vector<SpvReflectInterfaceVariable*> input_vars(input_variable_count);
 		reflector.EnumerateInputVariables(&input_variable_count, input_vars.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		if (auto result = reflector.GetResult(); spv_failed(result)) {
+			return Err::make(std::fmt("Spirv reflection input variable enumeration failed with %s" CODE_LOC, to_cstr(result)));
+		}
 
 		for (auto& iv : input_vars) {
 			if (!iv->name) continue;
@@ -156,12 +313,16 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 	std::vector<InterfaceVariableInfo> output_variables;
 	u32 output_variable_count;
 	reflector.EnumerateOutputVariables(&output_variable_count, nullptr);
-	ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+	if (auto result = reflector.GetResult(); spv_failed(result)) {
+		return Err::make(std::fmt("Spirv reflection output variable enumeration failed with %s" CODE_LOC, to_cstr(result)));
+	}
 
 	if (output_variable_count) {
 		std::vector<SpvReflectInterfaceVariable*> output_vars(output_variable_count);
 		reflector.EnumerateOutputVariables(&output_variable_count, output_vars.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		if (auto result = reflector.GetResult(); spv_failed(result)) {
+			return Err::make(std::fmt("Spirv reflection output variable enumeration failed with %s" CODE_LOC, to_cstr(result)));
+		}
 
 		for (auto& iv : output_vars) {
 			if (!iv->name) continue;
@@ -174,19 +335,24 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 			};
 		}
 	}
-	std::ranges::sort(output_variables, [](InterfaceVariableInfo& a, InterfaceVariableInfo& b) {
-		return a.name > b.name;
+	std::ranges::sort(output_variables, [](InterfaceVariableInfo& _a, InterfaceVariableInfo& _b) {
+		return _a.name > _b.name;
 	});
 
 	std::vector<vk::PushConstantRange> push_constant_ranges;
 	u32 push_constant_count = 0;
 	reflector.EnumeratePushConstantBlocks(&push_constant_count, nullptr);
+	if (auto result = reflector.GetResult(); spv_failed(result)) {
+		return Err::make(std::fmt("Spirv reflection push constant enumeration failed with %s" CODE_LOC, to_cstr(result)));
+	}
 
 	// Push const is not perfect
 	if (push_constant_count) {
 		std::vector<SpvReflectBlockVariable*> push_constants(push_constant_count);
 		reflector.EnumeratePushConstantBlocks(&push_constant_count, push_constants.data());
-		ERROR_IF(spv_failed(reflector.GetResult()), std::fmt("Spirv reflection failed with %s", to_cstr(reflector.GetResult())));
+		if (auto result = reflector.GetResult(); spv_failed(result)) {
+			return Err::make(std::fmt("Spirv reflection push constant enumeration failed with %s" CODE_LOC, to_cstr(result)));
+		}
 
 		for (auto* pc_ : push_constants) {
 			push_constant_ranges.emplace_back() = {
@@ -197,161 +363,31 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 		}
 	}
 
-	// Module creation
-	auto [result, shader] = parent_device->device.createShaderModule({
-		.codeSize = sizeof(u32) * code.size(),
-		.pCode = code.data(),
-	});
-	if (!failed(result)) {
-		parent_device->set_object_name(shader, _name);
-	}
-
-	ShaderInfo shader_info = {
+	return ShaderInfo{
 		.name = std::string(_name),
+		.stage = shader_stage,
 		.input_vars = move(input_variables),
 		.output_vars = move(output_variables),
 		.descriptor_names = move(descriptor_names),
 		.descriptors = move(descriptors),
 		.push_ranges = move(push_constant_ranges),
 	};
-
-	auto& val = shader_map_[hash_key] = {
-		1u,
-		{
-			.stage = {
-				.stage = shader_stage,
-				.shaderModule = shader,
-				.pName = "main",
-			},
-			.info = shader_info,
-			.program_hash = hash_key,
-			.layout_hash = hash_any(shader_info),
-		}
-	};
-
-	return vk::ResultValue<Shader*>(result, &val.second);
 }
 
-void PipelineFactory::destroy_shader_module(Shader* _shader) noexcept {
-	const auto hash_key = hash_any(_shader->info.name);
-	const auto found = shader_map_.contains(hash_key);
-	ERROR_IF(!found, std::fmt("Destroy called on unexisting shader %s", _shader->info.name.c_str()));
-
-	if (found && 0 == --shader_map_[hash_key].first) {
-		DEBUG(std::fmt("Deleting cached shader %s", _shader->info.name.data()));
-		parent_device->device.destroyShaderModule(_shader->stage.shaderModule);
-		shader_map_.erase(hash_key);
-	}
-}
-
-vk::ResultValue<std::vector<Shader*>> PipelineFactory::create_shaders(const std::vector<std::string_view>& _names) {
-	std::vector<Shader*> shaders;
-	shaders.reserve(_names.size());
-
-	for (const auto& name : _names) {
-		vk::Result res;
-		tie(res, shaders.emplace_back()) = create_shader_module(name);
-		ERROR_IF(failed(res), std::fmt("Shader %s creation failed with %s", name.data(), to_cstr(res)));
-		if (failed(res)) {
-			for (auto& shader_ : shaders) {
-				parent_device->device.destroyShaderModule(shader_->stage.shaderModule);
-			}
-			return { res, {} };
-		}
-	}
-
-	/*
-	 * TODO:
-	 * Change supported to support the rest
-	 */
-
-	// Check if given shader combos are supported
-	constexpr auto supported = [](const vk::ShaderStageFlags _flags) {
-		if (_flags & (vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment)) {
-			return true;
-		}
-		return false;
-	};
-
-	Shader* vertex_shader = nullptr;
-	Shader* fragment_shader = nullptr;
-
-	vk::ShaderStageFlags used_stages;
-	for (auto& stage_ : shaders) {
-		if (stage_->stage.stage == vk::ShaderStageFlagBits::eVertex) vertex_shader = stage_;
-		else if (stage_->stage.stage == vk::ShaderStageFlagBits::eFragment) fragment_shader = stage_;
-		used_stages |= stage_->stage.stage;
-		WARN_IF(!supported(stage_->stage.stage), std::fmt("%s Shader unsupported", to_string(stage_->stage.stage).c_str()));
-	}
-
-	ERROR_IF((used_stages & vk::ShaderStageFlagBits::eAllGraphics) && (used_stages & vk::ShaderStageFlagBits::eCompute), "Compute and Graphics stages can't be used in same pipeline");
-
-	if (vertex_shader != nullptr && fragment_shader != nullptr) {
-
-		WARN_IF(vertex_shader->info.output_vars.size() != fragment_shader->info.input_vars.size(), std::fmt("%s outputs don't map to %s Inputs 1:1 (%lu vs %lu)", vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
-		auto vertex_out = vertex_shader->info.output_vars.begin();
-		const auto vertex_out_end = vertex_shader->info.output_vars.end();
-		auto fragment_input = fragment_shader->info.input_vars.begin();
-
-		for (; vertex_out != vertex_out_end; ++vertex_out, ++fragment_input) {
-			ERROR_IF(*fragment_input != *vertex_out, std::fmt("%s output does not match %s inputs", vertex_shader->info.name.c_str(), fragment_shader->info.name.c_str()));
-		}
-	} else if (vertex_shader != nullptr || fragment_shader != nullptr) {
-		// TODO: Add compute shader logic
-		ERROR("Vertex shader and Fragment shader must both exist");
-	}
-
-	return { vk::Result::eSuccess, shaders };
-}
-
-void PipelineFactory::destroy_pipeline_layout(Layout* _layout) noexcept {
-	const auto hash_key = _layout->hash;
-	const auto found = layout_map_.contains(hash_key);
-	ERROR_IF(!found, std::fmt("Destroy called on unexisting layout %s", _layout->layout_info.name.c_str()));
-
-	try {
-		if (found && 0 == --layout_map_[hash_key].first) {
-			DEBUG(std::fmt("Deleting cached layout %s", _layout->layout_info.name.data()));
-			parent_device->device.destroyPipelineLayout(_layout->layout);
-			for (auto& dsl_ : _layout->descriptor_set_layouts) {
-				parent_device->device.destroyDescriptorSetLayout(dsl_);
-			}
-			layout_map_.erase(hash_key);
-		}
-	} catch (std::exception& e) {
-		ERROR(e.what());
-	}
-}
-
-void PipelineFactory::destroy_pipeline(Pipeline* _pipeline) noexcept {
-	const auto hash_key = _pipeline->hash;
-	const auto& found = pipeline_map_.contains(hash_key);
-	ERROR_IF(!found, std::fmt("Destroy called on unexisting pipeline %s", _pipeline->name.c_str()));
-	try {
-		if (found && 0 >= --pipeline_map_[hash_key].first) {
-			DEBUG(std::fmt("Deleting cached pipeline %s", _pipeline->name.data()));
-			for (auto& shader_ : _pipeline->shaders) {
-				this->destroy_shader_module(shader_);
-			}
-			this->destroy_pipeline_layout(_pipeline->layout);
-			parent_device->device.destroyPipeline(_pipeline->pipeline);
-			layout_map_.erase(hash_key);
-		}
-	} catch (std::exception& e) {
-		ERROR(e.what());
-	}
-}
-
-vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_descriptor_layouts(const ShaderInfo& _shader_info) {
-	auto result = vk::Result::eSuccess;
+Res<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_descriptor_layouts(const ShaderInfo& _shader_info) {
 	std::vector<vk::DescriptorSetLayout> descriptor_set_layout;
+	const auto cleanup_descriptor_set_layout = [this, &descriptor_set_layout] {
+		for (auto& dsl_ : descriptor_set_layout) {
+			parent_device->device.destroyDescriptorSetLayout(dsl_);
+		}
+	};
 
 	if (_shader_info.descriptors.empty()) {
-		return vk::ResultValue(result, descriptor_set_layout);
+		return std::move(descriptor_set_layout);
 	}
 
 	std::vector<vk::DescriptorSetLayoutBinding> bindings;
-	u32 current_set = _shader_info.descriptors.front().set;
+	auto current_set = _shader_info.descriptors.front().set;
 
 	for (const auto& dsi_ : _shader_info.descriptors) {
 		bindings.push_back({
@@ -362,54 +398,51 @@ vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 		});
 
 		if (current_set != dsi_.set) {
+			vk::Result result;
 			tie(result, descriptor_set_layout.emplace_back()) = parent_device->device.createDescriptorSetLayout({
 				.bindingCount = cast<u32>(bindings.size()),
 				.pBindings = bindings.data(),
 			});
 			bindings.clear();
-			ERROR_IF(failed(result), std::fmt("Set %d creation failed with %s", current_set, to_cstr(result)));
 			if (failed(result)) {
-				for (auto& dsl_ : descriptor_set_layout) {
-					parent_device->device.destroyDescriptorSetLayout(dsl_);
-				}
+				cleanup_descriptor_set_layout();
 				descriptor_set_layout.clear();
-				return vk::ResultValue(result, descriptor_set_layout);
+				return Err::make(std::fmt("Set %d creation failed with %s" CODE_LOC, current_set, to_cstr(result)), result);
 			}
 		}
 		current_set = dsi_.set;
 	}
+
 	if (!bindings.empty()) {
+		vk::Result result;
 		tie(result, descriptor_set_layout.emplace_back()) = parent_device->device.createDescriptorSetLayout({
 			.bindingCount = cast<u32>(bindings.size()),
 			.pBindings = bindings.data(),
 		});
 		bindings.clear();
-		ERROR_IF(failed(result), std::fmt("Set %d creation failed with %s", current_set, to_cstr(result)));
 		if (failed(result)) {
-			for (auto& dsl_ : descriptor_set_layout) {
-				parent_device->device.destroyDescriptorSetLayout(dsl_);
-			}
-			descriptor_set_layout.clear();
-			return vk::ResultValue(result, descriptor_set_layout);
+			cleanup_descriptor_set_layout();
+			return Err::make(std::fmt("Set %d creation failed with %s" CODE_LOC, current_set, to_cstr(result)), result);
 		}
 	}
 
-	return vk::ResultValue(result, descriptor_set_layout);
+	return std::move(descriptor_set_layout);
 }
 
-void merge_acc_descriptor(DescriptorInfo* _acc, DescriptorInfo& _info) {
+Res<> merge_acc_descriptor(DescriptorInfo* _acc, DescriptorInfo& _info) {
 	std::map<u32, DescriptorInfo> binding_map;
-	ERROR_IF(_info.set != _acc->set, "Descriptor Set mismatch");
-	ERROR_IF(_acc->binding != _info.binding, std::fmt("Bindings %s and %s don't match.", _acc->name != _info.name));
+	if (_info.set != _acc->set) {
+		return Err::make("Descriptor Set mismatch" CODE_LOC);
+	}
+	if (_acc->binding != _info.binding) {
+		return Err::make(std::fmt("Bindings %s and %s don't match.", _acc->name != _info.name));
+	}
 	_acc->name = move(_info.name);
 	_acc->stages |= _info.stages;
+	return {};
 }
 
-vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vector<Shader*>& _shaders) {
-
-	auto result = vk::Result::eSuccess;
-	vk::PipelineLayout layout;
-
+Res<Layout*> PipelineFactory::create_pipeline_layout(const std::vector<Shader*>& _shaders) {
 	usize layout_key = 0;
 	for (const auto& shader_ : _shaders) {
 		layout_key = hash_combine(layout_key, shader_->layout_hash);
@@ -417,7 +450,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 	if (layout_map_.contains(layout_key)) {
 		auto& [ref_count_, layout_] = layout_map_[layout_key];
 		++ref_count_;
-		return vk::ResultValue(result, &layout_);
+		return &layout_;
 	}
 
 	Shader* vertex_shader = nullptr;
@@ -440,7 +473,9 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 		for (auto& descriptor_ : shader_->info.descriptors) {
 			auto find_d = std::ranges::lower_bound(descriptors, descriptor_, descriptor_info_lt);
 			if (find_d != descriptors.end()) {
-				merge_acc_descriptor(&*find_d, descriptor_);
+				if (auto res = merge_acc_descriptor(&*find_d, descriptor_); !res) {
+					return Err::make(CODE_LOC, std::move(res.error()));
+				}
 			} else {
 				descriptors.push_back(descriptor_);
 			}
@@ -489,17 +524,21 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 		.push_ranges = move(push_ranges),
 	};
 
-	std::vector<vk::DescriptorSetLayout> descriptor_layouts;
-	tie(result, descriptor_layouts) = create_descriptor_layouts(pipeline_info);
-	ERROR_IF(failed(result), std::fmt("Descriptor layouts creation for %s failed with %s", pipeline_info.name.c_str(), to_cstr(result))) THEN_CRASH(result);
+	auto descriptor_layouts = create_descriptor_layouts(pipeline_info);
+	if (!descriptor_layouts) {
+		return Err::make(std::fmt("Descriptor layouts creation for %s failed" CODE_LOC, pipeline_info.name.c_str()), std::move(descriptor_layouts.error()));
+	}
 
-	tie(result, layout) = parent_device->device.createPipelineLayout({
-		.setLayoutCount = cast<u32>(descriptor_layouts.size()),
-		.pSetLayouts = descriptor_layouts.data(),
+	auto [result, layout] = parent_device->device.createPipelineLayout({
+		.setLayoutCount = cast<u32>(descriptor_layouts->size()),
+		.pSetLayouts = descriptor_layouts->data(),
 		.pushConstantRangeCount = cast<u32>(pipeline_info.push_ranges.size()),
 		.pPushConstantRanges = pipeline_info.push_ranges.data(),
 	});
-	ERROR_IF(failed(result), std::fmt("Pipeline layout creation for %s failed with %s", pipeline_info.name.c_str(), to_cstr(result))) THEN_CRASH(result);
+	if (failed(result)) {
+		return Err::make(std::fmt("Pipeline layout creation for %s failed with %s" CODE_LOC, pipeline_info.name.c_str(), to_cstr(result)), result);
+	}
+
 	parent_device->set_object_name(layout, pipeline_info.name);
 
 	auto& [key_, layout_] = layout_map_[layout_key] = {
@@ -508,30 +547,44 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 			.hash = layout_key,
 			.layout_info = pipeline_info,
 			.layout = layout,
-			.descriptor_set_layouts = move(descriptor_layouts),
+			.descriptor_set_layouts = move(descriptor_layouts.value()),
 		}
 	};
 
-	return vk::ResultValue<Layout*>(result, &layout_);
+	return &layout_;
 }
 
-vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreateInfo& _create_info) {
-
-	vk::Pipeline pipeline;
+Res<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreateInfo& _create_info) {
 
 	usize pipeline_key = hash_any(_create_info);
 	if (pipeline_map_.contains(pipeline_key)) {
-		auto& entry_ = pipeline_map_[pipeline_key];
-		++entry_.first;
-		return vk::ResultValue(vk::Result::eSuccess, &entry_.second);
+		auto& [count_, pipeline_] = pipeline_map_[pipeline_key];
+		++count_;
+		return &pipeline_;
 	}
 
-	auto [result, shaders] = create_shaders(_create_info.shader_files);
-	ERROR_IF(failed(result), "Shader creation failed");
+	std::vector<Shader*> shaders;
+	auto cleanup_shaders = [this, &shaders] {
+		for (auto* p_ : shaders) {
+			this->destroy_shader_module(p_);
+		}
+	};
+	if (auto res = create_shaders(_create_info.shader_files)) {
+		shaders = std::move(res.value());
+	} else {
+		return Err::make("Shader creation failed" CODE_LOC, std::move(res.error()));
+	}
 
 	Layout* pipeline_layout;
-	tie(result, pipeline_layout) = create_pipeline_layout(shaders);
-	ERROR_IF(failed(result), std::fmt("Pipeline layout creation for %s failed with %s", _create_info.name.c_str(), to_cstr(result)));
+	auto cleanup_layout = [this, &pipeline_layout] {
+		this->destroy_pipeline_layout(pipeline_layout);
+	};
+	if (auto res = create_pipeline_layout(shaders)) {
+		pipeline_layout = res.value();
+	} else {
+		cleanup_shaders();
+		return Err::make(std::fmt("Pipeline layout creation for %s failed" CODE_LOC, _create_info.name.c_str()), std::move(res.error()));
+	}
 
 	std::vector<ShaderStage> shader_stages(shaders.size());
 	std::ranges::transform(shaders, shader_stages.begin(), [](Shader* _s) {
@@ -544,8 +597,17 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 		auto match_iv = std::ranges::find_if(in_attr, [&_name = ivs.name](auto& _ia) {
 			return _ia.attr_name == _name;
 		});
-		ERROR_IF(match_iv == in_attr.end(), std::fmt("Attribute %s required by shader, not found", ivs.name.c_str()))
-		ELSE_IF_ERROR(match_iv->format != ivs.format, std::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)", ivs.name.c_str(), to_cstr(ivs.format), to_cstr(match_iv->format)));
+
+		if (match_iv == in_attr.end()) {
+			cleanup_shaders();
+			cleanup_layout();
+			return Err::make(std::fmt("Attribute %s required by shader, not found" CODE_LOC, ivs.name.c_str()));
+		}
+		if (match_iv->format != ivs.format) {
+			cleanup_shaders();
+			cleanup_layout();
+			return Err::make(std::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)" CODE_LOC, ivs.name.c_str(), to_cstr(ivs.format), to_cstr(match_iv->format)));
+		}
 
 		input_attributes[ivs.location] = {
 			.location = ivs.location,
@@ -613,7 +675,7 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 		.pDynamicStates = _create_info.dynamic_states.data(),
 	};
 
-	tie(result, pipeline) = parent_device->device.createGraphicsPipeline({ /*Cache*/ }, {
+	auto [result, pipeline] = parent_device->device.createGraphicsPipeline({ /*Cache*/ }, {
 		.stageCount = cast<u32>(ssci.size()),
 		.pStages = recast<const vk::PipelineShaderStageCreateInfo*>(ssci.data()),
 		.pVertexInputState = &visci,
@@ -624,15 +686,19 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 		.pColorBlendState = &cbsci,
 		.pDynamicState = &dsci,
 		.layout = pipeline_layout->layout,
-		.renderPass = _create_info.renderpass.renderpass,
+		.renderPass = _create_info.renderpass->renderpass,
 	});
-	ERROR_IF(failed(result), std::fmt("Pipeline %s creation failed with %s", _create_info.name.c_str(), to_cstr(result)));
+
+	if (failed(result)) {
+		return Err::make(std::fmt("Pipeline %s creation failed with %s" CODE_LOC, _create_info.name.c_str(), to_cstr(result)), result);
+	}
+
 	parent_device->set_object_name(pipeline, _create_info.name);
 
 	auto& [key_, pipeline_] = pipeline_map_[pipeline_key] = {
 		1u,
 		Pipeline{
-			.shaders = move(shaders),
+			.shaders = std::move(shaders),
 			.layout = pipeline_layout,
 			.pipeline = pipeline,
 			.name = _create_info.name,
@@ -641,7 +707,7 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 		}
 	};
 
-	return vk::ResultValue(result, &pipeline_);
+	return &pipeline_;
 };
 
 usize std::hash<ShaderInfo>::operator()(const ShaderInfo& _val) const noexcept {
@@ -668,7 +734,7 @@ usize std::hash<DescriptorInfo>::operator()(const DescriptorInfo& _val) const no
 }
 
 usize std::hash<PipelineCreateInfo>::operator()(const PipelineCreateInfo& _value) const noexcept {
-	auto hash_val = hash_any(_value.renderpass.attachment_format);
+	auto hash_val = hash_any(_value.renderpass->attachment_format);
 	{
 		// vertex input
 		for (const auto& binding_ : _value.vertex_input.bindings) {
@@ -760,7 +826,7 @@ void Pipeline::destroy() {
 	parent_factory->destroy_pipeline(this);
 }
 
-PipelineFactory::PipelineFactory(PipelineFactory&& _other) noexcept: parent_device{ _other.parent_device }
+PipelineFactory::PipelineFactory(PipelineFactory&& _other) noexcept: parent_device{ std::move(_other.parent_device) }
                                                                    , shader_map_{ std::move(_other.shader_map_) }
                                                                    , layout_map_{ std::move(_other.layout_map_) }
                                                                    , pipeline_map_{ std::move(_other.pipeline_map_) } {}

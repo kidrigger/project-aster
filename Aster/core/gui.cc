@@ -110,9 +110,9 @@ namespace ImGui {
 
 		ImGui_ImplVulkan_InitInfo init_info = {
 			.Instance = device_->parent_context->instance,
-			.PhysicalDevice = device_->physical_device,
+			.PhysicalDevice = device_->physical_device.device,
 			.Device = device_->device,
-			.QueueFamily = device_->queue_families.graphics_idx,
+			.QueueFamily = device_->physical_device.queue_families.graphics_idx,
 			.Queue = device_->queues.graphics,
 			.PipelineCache = nullptr,
 			.DescriptorPool = descriptor_pool,
@@ -123,18 +123,17 @@ namespace ImGui {
 		};
 		ImGui_ImplVulkan_Init(&init_info, renderpass);
 
-		vk::CommandBuffer cmd;
-		tie(result, cmd) = device_->alloc_temp_command_buffer(device_->transfer_cmd_pool);
-		result = cmd.begin(vk::CommandBufferBeginInfo{ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
+		auto cmd = device_->alloc_temp_command_buffer(device_->transfer_cmd_pool);
+		ERROR_IF(!cmd, std::fmt("Could not allocate temporary command buffer\n|> %s", cmd.error().what())) THEN_CRASH(cmd.error().code());
+		result = cmd->begin(vk::CommandBufferBeginInfo{ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
 
-		ImGui_ImplVulkan_CreateFontsTexture(cmd);
+		ImGui_ImplVulkan_CreateFontsTexture(cmd.value());
 
-		result = cmd.end();
+		result = cmd->end();
 		ERROR_IF(failed(result), std::fmt("Cmd buffer end failed with %s", to_cstr(result))) THEN_CRASH(result);
 
-		auto task = SubmitTask<void>();
-		result = task.submit(device_, device_->queues.transfer, device_->transfer_cmd_pool, { cmd });
-		ERROR_IF(failed(result), std::fmt("Fonts could not be loaded to GPU with %s", to_cstr(result))) THEN_CRASH(result);
+		auto task = SubmitTask<void>::create(device_, device_->queues.transfer, device_->transfer_cmd_pool, { cmd.value() });
+		ERROR_IF(!task, std::fmt("Fonts could not be loaded to GPU with %s", task.error().what())) THEN_CRASH(task.error().code());
 
 		framebuffers.reserve(_swapchain->image_count);
 		for (const auto& iv : _swapchain->image_views) {
@@ -149,8 +148,9 @@ namespace ImGui {
 			ERROR_IF(failed(result), std::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
 		}
 
-		result = task.wait_and_destroy();
-		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result))) THEN_CRASH(result);
+		if (auto res = task->wait_and_destroy(); !res) {
+			ERROR(std::fmt("Fence wait failed\n|> %s", res.error().what())) THEN_CRASH(res.error().code());
+		}
 	}
 
 	void Destroy() {

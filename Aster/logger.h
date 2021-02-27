@@ -42,7 +42,7 @@ struct Logger {
 	}
 
 	template <LogType LogLevel>
-	void log(const std::string_view& _message, const char* _loc, u32 _line) {
+	void log(const std::string_view& _message, const char* _loc, u32 _line) const {
 		if (cast<u32>(LogLevel) <= minimum_logging_level) {
 			printf("%s%s %s%s| at %s:%u%s\n", to_color_cstr<LogLevel>(), to_cstr<LogLevel>(), _message.data(), ANSI_Black, _loc, _line, ANSI_Reset);
 		}
@@ -54,7 +54,7 @@ struct Logger {
 	}
 
 	template <LogType LogLevel>
-	void log_cond(const char* _expr_str, const std::string_view& _message, const char* _loc, u32 _line) {
+	void log_cond(const char* _expr_str, const std::string_view& _message, const char* _loc, u32 _line) const {
 		if (cast<u32>(LogLevel) <= minimum_logging_level) {
 			printf("%s%s (%s) %s%s| at %s:%u%s\n", to_color_cstr<LogLevel>(), to_cstr<LogLevel>(), _expr_str, _message.data(), ANSI_Black, _loc, _line, ANSI_Reset);
 		}

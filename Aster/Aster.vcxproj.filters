@@ -34,6 +34,7 @@
     <ClCompile Include="thirdparty\spirv_reflect\spirv_reflect.c" />
     <ClCompile Include="core\renderpass.cc" />
     <ClCompile Include="util\buffer_writer.cpp" />
+    <ClCompile Include="core\buffer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />
@@ -81,6 +82,7 @@
     <ClInclude Include="core\renderpass.h" />
     <ClInclude Include="util\buffer_writer.h" />
     <ClInclude Include="ownership.h" />
+    <ClInclude Include="core\buffer.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\shader.fs.hlsl" />

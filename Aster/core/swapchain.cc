@@ -8,7 +8,7 @@
 Swapchain::Swapchain(const std::string_view& _name, Borrowed<Window>&& _window, Borrowed<Device>&& _device)
 	: parent_window{ std::move(_window) }
 	, parent_device{ std::move(_device) }
-	, support{ &_window->surface, &_device->physical_device }
+	, support{ &_window->surface, &_device->physical_device.device }
 	, name{ _name } {
 
 	VERBOSE("Selecting Surface formats");
@@ -46,7 +46,7 @@ Swapchain::Swapchain(const std::string_view& _name, Borrowed<Window>&& _window, 
 		image_count = std::min(image_count, support.capabilities.maxImageCount);
 	}
 
-	requires_ownership_transfer = (_device->queue_families.graphics_idx != _device->queue_families.present_idx); // needs transfer if not the same queue
+	requires_ownership_transfer = (_device->physical_device.queue_families.graphics_idx != _device->physical_device.queue_families.present_idx); // needs transfer if not the same queue
 
 	vk::Result result;
 	tie(result, swapchain) = _device->device.createSwapchainKHR({
@@ -121,7 +121,7 @@ Swapchain::Swapchain(Swapchain&& _other) noexcept: parent_window{ std::move(_oth
 void Swapchain::recreate() {
 
 	VERBOSE("Recreating Swapchain formats");
-	support = SurfaceSupportDetails{ &parent_window->surface, &parent_device->physical_device };
+	support = SurfaceSupportDetails{ &parent_window->surface, &parent_device->physical_device.device };
 
 	VERBOSE("Selecting Surface formats");
 
@@ -158,7 +158,7 @@ void Swapchain::recreate() {
 		image_count = std::min(image_count, support.capabilities.maxImageCount);
 	}
 
-	requires_ownership_transfer = (parent_device->queue_families.graphics_idx != parent_device->queue_families.present_idx); // needs transfer if not the same queue
+	requires_ownership_transfer = (parent_device->physical_device.queue_families.graphics_idx != parent_device->physical_device.queue_families.present_idx); // needs transfer if not the same queue
 
 	vk::Result result;
 	tie(result, swapchain) = parent_device->device.createSwapchainKHR({

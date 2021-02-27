@@ -192,6 +192,7 @@
     </FxCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="core\buffer.cpp" />
     <ClCompile Include="core\gui.cc" />
     <ClCompile Include="core\pipeline.cc" />
     <ClCompile Include="core\renderpass.cc" />
@@ -224,6 +225,7 @@
   <ItemGroup>
     <ClInclude Include="config.h" />
     <ClInclude Include="constants.h" />
+    <ClInclude Include="core\buffer.h" />
     <ClInclude Include="core\camera.h" />
     <ClInclude Include="core\gui.h" />
     <ClInclude Include="core\pipeline.h" />

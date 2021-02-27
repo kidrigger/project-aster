@@ -15,15 +15,21 @@ TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pip
 
 	const auto& device = _pipeline_factory->parent_device;
 
-	tie(result, lut) = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
-	ERROR_IF(failed(result), std::fmt("LUT Image could not be created with %s", to_cstr(result)));
+	if (auto res = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)) {
+		lut = std::move(res.value());
+	} else {
+		ERROR(std::fmt("LUT Image could not be created\n|> %s", res.error().what())) THEN_CRASH(res.error().code());
+	}
 
-	tie(result, lut_view) = ImageView::create( borrow(lut), vk::ImageViewType::e2D, {
+	if (auto res = ImageView::create(borrow(lut), vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.levelCount = 1,
 		.layerCount = 1,
-	});
-	ERROR_IF(failed(result), "LUT Image View could not be created");
+	})) {
+		lut_view = std::move(res.value());
+	} else {
+		ERROR(std::fmt("LUT Image View could not be created\n|> %s", res.error().what())) THEN_CRASH(res.error().code());
+	}
 
 	tie(result, lut_sampler) = device->device.createSampler({
 		.magFilter = vk::Filter::eLinear,
@@ -65,15 +71,19 @@ TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pip
 	};
 
 	// Renderpass
-	tie(result, renderpass) = RenderPass::create("Transmittance LUT pass", _pipeline_factory->parent_device, {
+	if (auto res = RenderPass::create("Transmittance LUT pass", _pipeline_factory->parent_device, {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency
-	});
-	ERROR_IF(failed(result), std::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result))) THEN_CRASH(result) ELSE_INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
+	})) {
+		renderpass = std::move(res.value());
+		INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
+	} else {
+		ERROR(std::fmt("Transmittance LUT pass creation failed" CODE_LOC "\n|> %s", res.error().what())) THEN_CRASH(res.error().code());
+	}
 
 	// Framebuffer
 	tie(result, framebuffer) = device->device.createFramebuffer({
@@ -87,8 +97,8 @@ TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pip
 	ERROR_IF(failed(result), std::fmt("LUT Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
 	device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
 
-	tie(result, pipeline) = parent_factory->create_pipeline({
-		.renderpass = renderpass,
+	if (auto res = parent_factory->create_pipeline({
+		.renderpass = borrow(renderpass),
 		.viewport_state = {
 			.enable_dynamic = false,
 			.viewports = {
@@ -113,8 +123,13 @@ TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pip
 		},
 		.shader_files = { R"(res/shaders/transmittance_lut.vs.spv)", R"(res/shaders/transmittance_lut.fs.spv)" },
 		.name = "LUT Pipeline",
-	});
-	ERROR_IF(failed(result), std::fmt("LUT Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
+	})) {
+		pipeline = res.value();
+		INFO("LUT Pipeline Created");
+	} else {
+		auto result_ = res.error().code();
+		ERROR(std::fmt("LUT Pipeline creation failed with %s" CODE_LOC "\n|> %s", to_cstr(result_), res.error().what())) THEN_CRASH(result_);
+	}
 
 	recalculate(_atmos);
 }
@@ -124,18 +139,19 @@ void TransmittanceContext::recalculate(const AtmosphereInfo& _atmos) {
 
 	rdoc::start_capture();
 	auto& device = parent_factory->parent_device;
-	auto [result, cmd] = device->alloc_temp_command_buffer(device->graphics_cmd_pool);
+	auto cmd = device->alloc_temp_command_buffer(device->graphics_cmd_pool);
+	ERROR_IF(!cmd, std::fmt("Command buffer begin failed\n|> %s", cmd.error().what())) THEN_CRASH(cmd.error().code()) ELSE_INFO("Cmd Created");
 
-	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
+	auto result = cmd->begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
 	ERROR_IF(failed(result), std::fmt("Command buffer begin failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Cmd Created");
 
-	cmd.beginDebugUtilsLabelEXT({
+	cmd->beginDebugUtilsLabelEXT({
 		.pLabelName = "Transmittance LUT Calculation",
 		.color = std::array{ 0.5f, 0.0f, 0.0f, 1.0f },
 	});
 
 	vk::ClearValue clear_val(std::array{ 0.0f, 1.0f, 0.0f, 1.0f });
-	cmd.beginRenderPass({
+	cmd->beginRenderPass({
 		.renderPass = renderpass.renderpass,
 		.framebuffer = framebuffer,
 		.renderArea = {
@@ -146,23 +162,20 @@ void TransmittanceContext::recalculate(const AtmosphereInfo& _atmos) {
 		.pClearValues = &clear_val,
 	}, vk::SubpassContents::eInline);
 
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->pipeline);
-	cmd.pushConstants(pipeline->layout->layout, vk::ShaderStageFlagBits::eFragment, 0u, vk::ArrayProxy<const AtmosphereInfo>{ _atmos });
-	cmd.draw(4, 1, 0, 0);
+	cmd->bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->pipeline);
+	cmd->pushConstants(pipeline->layout->layout, vk::ShaderStageFlagBits::eFragment, 0u, vk::ArrayProxy<const AtmosphereInfo>{ _atmos });
+	cmd->draw(4, 1, 0, 0);
 
-	cmd.endRenderPass();
+	cmd->endRenderPass();
 
-	cmd.endDebugUtilsLabelEXT();
+	cmd->endDebugUtilsLabelEXT();
 
-	result = cmd.end();
+	result = cmd->end();
 	ERROR_IF(failed(result), std::fmt("Command buffer end failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Command buffer Created");
 
-	SubmitTask<void> task;
-	result = task.submit(device, device->queues.graphics, device->graphics_cmd_pool, { cmd });
-	ERROR_IF(failed(result), std::fmt("Submit failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Submitted Created");
-
-	result = task.wait_and_destroy();
-	ERROR_IF(failed(result), std::fmt("Fence waiting failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Written to");
+	auto res = SubmitTask<void>::create(device, device->queues.graphics, device->graphics_cmd_pool, { cmd.value() })
+	.map(&SubmitTask<void>::wait_and_destroy);
+	ERROR_IF(!res, std::fmt("Submit failed\n|> %s", res.error().what())) THEN_CRASH(res.error().code()) ELSE_INFO("LUT Submitted Created");
 
 	rdoc::end_capture();
 }
@@ -170,11 +183,8 @@ void TransmittanceContext::recalculate(const AtmosphereInfo& _atmos) {
 TransmittanceContext::~TransmittanceContext() {
 	auto& device = parent_factory->parent_device;
 
-	lut.destroy();
-	lut_view.destroy();
 	device->device.destroySampler(lut_sampler);
 
 	pipeline->destroy();
 	device->device.destroyFramebuffer(framebuffer);
-	renderpass.destroy();
 }

@@ -70,35 +70,36 @@ Swapchain::Swapchain(const std::string_view& _name, Borrowed<Window>&& _window, 
 
 	_device->set_object_name(swapchain, name);
 
-	tie(result, images) = _device->device.getSwapchainImagesKHR(swapchain);
-	ERROR_IF(failed(result), std::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
-
-	u32 i_ = 0;
-	for (auto& image_ : images) {
-		_device->set_object_name(image_, std::fmt("%s Image %u", name.data(), i_++));
+	if (auto [res, vk_images] = _device->device.getSwapchainImagesKHR(swapchain); !failed(res)) {
+		int i_ = 0;
+		image_views.clear();
+		image_views.reserve(images.size());
+		images.reserve(vk_images.size());
+		for (auto& vk_image : vk_images) {
+			auto name_ = std::fmt("%s Image %u", name.data(), i_++);
+			_device->set_object_name(vk_image, name_);
+			images.emplace_back(_device, vk_image, vma::Allocation{}, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst, vma::MemoryUsage::eGpuOnly, extent.width * extent.height * 4, name_, vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
+		}
+	} else {
+		ERROR(std::fmt("Could not fetch images with %s", to_cstr(res))) THEN_CRASH(res);
 	}
 
-	i_ = 0;
+	auto i_ = 0;
+	image_views.clear();
+	image_views.reserve(images.size());
 	for (auto& image : images) {
-		tie(result, image_views.emplace_back()) = parent_device->device.createImageView({
-			.image = image,
-			.viewType = vk::ImageViewType::e2D,
-			.format = format,
-			.components = {}, // All Identity
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1,
-			},
-		});
-		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
-	}
-
-	i_ = 0;
-	for (auto& image_ : images) {
-		_device->set_object_name(image_, std::fmt("%s View %u", name.data(), i_++));
+		if (auto res = ImageView::create(borrow(image), vk::ImageViewType::e2D, vk::ImageSubresourceRange{
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		})) {
+			image_views.push_back(std::move(res.value()));
+			VERBOSE(std::fmt("Image view %u created", i_++));
+		} else {
+			ERROR(std::fmt("Image View Creation failed with %s", res.error().what())) THEN_CRASH(res.error().code());
+		}
 	}
 
 	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
@@ -182,43 +183,35 @@ void Swapchain::recreate() {
 
 	parent_device->set_object_name(swapchain, name);
 
-	tie(result, images) = parent_device->device.getSwapchainImagesKHR(swapchain);
-	ERROR_IF(failed(result), std::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
-
-	u32 i_ = 0;
-	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, std::fmt("%s Image %u", name.data(), i_++));
+	if (auto [res, vk_images] = parent_device->device.getSwapchainImagesKHR(swapchain); !failed(res)) {
+		int i_ = 0;
+		images.clear();
+		images.reserve(vk_images.size());
+		for (auto& vk_image : vk_images) {
+			auto name_ = std::fmt("%s Image %u", name.data(), i_++);
+			parent_device->set_object_name(vk_image, name_);
+			images.emplace_back(parent_device, vk_image, vma::Allocation{}, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst, vma::MemoryUsage::eGpuOnly, extent.width * extent.height * 4, name_, vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
+		}
+	} else {
+		ERROR(std::fmt("Could not fetch images with %s", to_cstr(res))) THEN_CRASH(res);
 	}
 
-	// TODO: See if this needs to be / can be async
-	result = parent_device->device.waitIdle();
-	ERROR_IF(failed(result), std::fmt("Device idling on %s failed with %s", parent_device->name.data(), to_cstr(result))) THEN_CRASH(result);
-	for (auto& image_view : image_views) {
-		parent_device->device.destroyImageView(image_view);
-	}
+	auto i_ = 0;
 	image_views.clear();
-
-	i_ = 0;
+	image_views.reserve(images.size());
 	for (auto& image : images) {
-		tie(result, image_views.emplace_back()) = parent_device->device.createImageView({
-			.image = image,
-			.viewType = vk::ImageViewType::e2D,
-			.format = format,
-			.components = {}, // All Identity
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1,
-			},
-		});
-		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
-	}
-
-	i_ = 0;
-	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, std::fmt("%s View %u", name.data(), i_++));
+		if (auto res = ImageView::create(borrow(image), vk::ImageViewType::e2D, vk::ImageSubresourceRange{
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
+		})) {
+			image_views.push_back(std::move(res.value()));
+			VERBOSE(std::fmt("Image view %u created", i_++));
+		} else {
+			ERROR(std::fmt("Image View Creation failed with %s", res.error().what())) THEN_CRASH(res.error().code());
+		}
 	}
 
 	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
@@ -243,9 +236,6 @@ Swapchain& Swapchain::operator=(Swapchain&& _other) noexcept {
 }
 
 Swapchain::~Swapchain() {
-	for (auto& image_view : image_views) {
-		parent_device->device.destroyImageView(image_view);
-	}
 
 	if (swapchain) {
 		parent_device->device.destroySwapchainKHR(swapchain);

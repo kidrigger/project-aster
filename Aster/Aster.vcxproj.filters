@@ -35,6 +35,10 @@
     <ClCompile Include="core\renderpass.cc" />
     <ClCompile Include="util\buffer_writer.cpp" />
     <ClCompile Include="core\buffer.cpp" />
+    <ClCompile Include="core\image.cpp" />
+    <ClCompile Include="core\sampler.cc" />
+    <ClCompile Include="core\image_view.cc" />
+    <ClCompile Include="core\framebuffer.cc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />
@@ -83,6 +87,10 @@
     <ClInclude Include="util\buffer_writer.h" />
     <ClInclude Include="ownership.h" />
     <ClInclude Include="core\buffer.h" />
+    <ClInclude Include="core\image_view.h" />
+    <ClInclude Include="core\image.h" />
+    <ClInclude Include="core\framebuffer.h" />
+    <ClInclude Include="core\sampler.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\shader.fs.hlsl" />

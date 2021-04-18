@@ -140,7 +140,7 @@ namespace ImGui {
 			tie(result, framebuffers.emplace_back()) = device_->device.createFramebuffer({
 				.renderPass = renderpass,
 				.attachmentCount = 1,
-				.pAttachments = &iv,
+				.pAttachments = &iv.image_view,
 				.width = _swapchain->extent.width,
 				.height = _swapchain->extent.height,
 				.layers = 1,
@@ -177,7 +177,7 @@ namespace ImGui {
 			tie(result, framebuffers.emplace_back()) = current_swapchain->parent_device->device.createFramebuffer({
 				.renderPass = renderpass,
 				.attachmentCount = 1,
-				.pAttachments = &iv,
+				.pAttachments = &iv.image_view,
 				.width = current_swapchain->extent.width,
 				.height = current_swapchain->extent.height,
 				.layers = 1,

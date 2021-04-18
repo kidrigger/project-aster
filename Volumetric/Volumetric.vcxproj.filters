@@ -21,7 +21,7 @@
     <ClCompile Include="transmittance_context.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="sky_view_context.cpp">
+    <ClCompile Include="sky_view_context.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

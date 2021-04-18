@@ -15,6 +15,8 @@
 #include <core/swapchain.h>
 #include <core/camera.h>
 #include <core/gui.h>
+#include <core/image.h>
+#include <core/image_view.h>
 
 #include <util/buffer_writer.h>
 
@@ -32,7 +34,7 @@
 i32 aster_main() {
 
 	g_logger.set_minimum_logging_level(Logger::LogType::eDebug);
-	GlfwContext glfw{};
+	GlfwContext glfw;
 	Owned<Context> context = new Context{ "Aster Core", { 0, 0, 1 } };
 	Owned<Window> window = new Window{ PROJECT_NAME, context.borrow(), { 1280u, 720u } };
 
@@ -170,7 +172,7 @@ i32 aster_main() {
 				tie(result_, framebuffers[i]) = device->device.createFramebuffer({
 					.renderPass = render_pass.renderpass,
 					.attachmentCount = 1,
-					.pAttachments = &swapchain->image_views[i],
+					.pAttachments = &swapchain->image_views[i].image_view,
 					.width = swapchain->extent.width,
 					.height = swapchain->extent.height,
 					.layers = 1,
@@ -356,7 +358,7 @@ i32 aster_main() {
 		};
 
 		vk::DescriptorImageInfo transmittance_image_info = {
-			.sampler = transmittance->lut_sampler,
+			.sampler = transmittance->lut_sampler.sampler,
 			.imageView = transmittance->lut_view.image_view,
 			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 		};

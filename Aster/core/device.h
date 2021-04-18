@@ -10,11 +10,12 @@
 #include <core/context.h>
 #include <core/window.h>
 #include <core/buffer.h>
+#include <core/image.h>
 
 #include <span>
 #include <string_view>
 
-struct Device;
+class Device;
 
 struct QueueFamilyIndices {
 	static constexpr u32 invalid_value = 0xFFFFFFFFu;
@@ -52,129 +53,11 @@ struct Queues {
 	Option<vk::Queue> compute;
 };
 
-struct Image {
-	Borrowed<Device> parent_device;
-	vk::Image image;
-	vma::Allocation allocation;
-	vk::ImageUsageFlags usage;
-	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
-	usize size = 0;
-	std::string name;
-
-	vk::ImageType type;
-	vk::Format format;
-	vk::Extent3D extent;
-	u32 layer_count;
-	u32 mip_count;
-
-	Image() = default;
-
-	Image(const Borrowed<Device>& _parent_device, const vk::Image& _image, const vma::Allocation& _allocation, const vk::ImageUsageFlags& _usage, vma::MemoryUsage _memory_usage, usize _size, const std::string& _name, vk::ImageType _type, vk::Format _format, const vk::Extent3D& _extent, u32 _layer_count, u32 _mip_count)
-		: parent_device(_parent_device)
-		, image(_image)
-		, allocation(_allocation)
-		, usage(_usage)
-		, memory_usage(_memory_usage)
-		, size(_size)
-		, name(_name)
-		, type(_type)
-		, format(_format)
-		, extent(_extent)
-		, layer_count(_layer_count)
-		, mip_count(_mip_count) {}
-
-
-	Image(const Image& _other) = delete;
-
-	Image(Image&& _other) noexcept
-		: parent_device{ std::move(_other.parent_device) }
-		, image{ std::exchange(_other.image, nullptr) }
-		, allocation{ std::exchange(_other.allocation, nullptr) }
-		, usage{ _other.usage }
-		, memory_usage{ _other.memory_usage }
-		, size{ _other.size }
-		, name{ std::move(_other.name) }
-		, type{ _other.type }
-		, format{ _other.format }
-		, extent{ _other.extent }
-		, layer_count{ _other.layer_count }
-		, mip_count{ _other.mip_count } {}
-
-	Image& operator=(const Image& _other) = delete;
-
-	Image& operator=(Image&& _other) noexcept {
-		if (this == &_other) return *this;
-		std::swap(parent_device, _other.parent_device);
-		std::swap(image, _other.image);
-		std::swap(allocation, _other.allocation);
-		usage = _other.usage;
-		memory_usage = _other.memory_usage;
-		size = _other.size;
-		name = std::move(_other.name);
-		type = _other.type;
-		format = _other.format;
-		extent = _other.extent;
-		layer_count = _other.layer_count;
-		mip_count = _other.mip_count;
-		return *this;
-	}
-
-	static Res<Image> create(const std::string_view& _name, const Borrowed<Device>& _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
-
-	~Image();
-};
-
-struct ImageView {
-	Borrowed<Image> parent_image;
-	vk::ImageView image_view;
-	vk::Format format;
-	vk::ImageViewType type;
-	vk::ImageSubresourceRange subresource_range;
-	std::string name;
-
-	ImageView() = default;
-
-	ImageView(const Borrowed<Image>& _parent_image, const vk::ImageView& _image_view, vk::Format _format, vk::ImageViewType _type, const vk::ImageSubresourceRange& _subresource_range, const std::string& _name)
-		: parent_image(_parent_image)
-		, image_view(_image_view)
-		, format(_format)
-		, type(_type)
-		, subresource_range(_subresource_range)
-		, name(_name) {}
-
-
-	ImageView(const ImageView& _other) = delete;
-
-	ImageView(ImageView&& _other) noexcept
-		: parent_image{ std::move(_other.parent_image) }
-		, image_view{ std::exchange(_other.image_view, nullptr) }
-		, format{ _other.format }
-		, type{ _other.type }
-		, subresource_range{ _other.subresource_range }
-		, name{ std::move(_other.name) } {}
-
-	ImageView& operator=(const ImageView& _other) = delete;
-
-	ImageView& operator=(ImageView&& _other) noexcept {
-		if (this == &_other) return *this;
-		std::swap(parent_image, _other.parent_image);
-		std::swap(image_view, _other.image_view);
-		format = _other.format;
-		type = _other.type;
-		subresource_range = _other.subresource_range;
-		name = std::move(_other.name);
-		return *this;
-	}
-
-	static Res<ImageView> create(const Borrowed<Image>& _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
-
-	~ImageView();
-};
-
 template <typename T>
 struct SubmitTask;
 
-struct Device {
+class Device {
+public:
 	struct PhysicalDeviceInfo {
 		vk::PhysicalDevice device;
 		vk::PhysicalDeviceProperties properties;

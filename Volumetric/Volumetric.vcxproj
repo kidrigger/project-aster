@@ -177,7 +177,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cc" />
-    <ClCompile Include="sky_view_context.cpp" />
+    <ClCompile Include="sky_view_context.cc" />
     <ClCompile Include="transmittance_context.cc" />
   </ItemGroup>
   <ItemGroup>

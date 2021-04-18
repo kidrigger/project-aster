@@ -7,7 +7,7 @@
 
 #include <global.h>
 
-struct Device;
+class Device;
 
 struct Buffer {
 	Borrowed<Device> parent_device;

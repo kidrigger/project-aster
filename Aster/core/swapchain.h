@@ -11,6 +11,8 @@
 
 #include <vector>
 
+#include <core/image_view.h>
+
 struct SurfaceSupportDetails {
 	vk::SurfaceCapabilitiesKHR capabilities;
 	std::vector<vk::SurfaceFormatKHR> formats;
@@ -43,8 +45,8 @@ struct Swapchain {
 	bool requires_ownership_transfer;
 	std::string name;
 
-	std::vector<vk::Image> images;
-	std::vector<vk::ImageView> image_views;
+	std::vector<Image> images;
+	std::vector<ImageView> image_views;
 	u32 image_count{ 0 };
 
 	Swapchain(const std::string_view& _name, Borrowed<Window>&& _window, Borrowed<Device>&& _device);

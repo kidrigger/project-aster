@@ -11,34 +11,22 @@
 TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pipeline_factory, const AtmosphereInfo& _atmos)
 	: parent_factory{ _pipeline_factory } {
 
-	vk::Result result;
-
 	const auto& device = _pipeline_factory->parent_device;
 
-	if (auto res = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)) {
-		lut = std::move(res.value());
-	} else {
-		ERROR(std::fmt("LUT Image could not be created\n|> %s", res.error().what())) THEN_CRASH(res.error().code());
-	}
+	lut = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled).value();
 
-	if (auto res = ImageView::create(borrow(lut), vk::ImageViewType::e2D, {
+	lut_view = ImageView::create(borrow(lut), vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.levelCount = 1,
 		.layerCount = 1,
-	})) {
-		lut_view = std::move(res.value());
-	} else {
-		ERROR(std::fmt("LUT Image View could not be created\n|> %s", res.error().what())) THEN_CRASH(res.error().code());
-	}
+	}).value();
 
-	tie(result, lut_sampler) = device->device.createSampler({
+	lut_sampler = Sampler::create(lut.name + " sampler", device, {
 		.magFilter = vk::Filter::eLinear,
 		.minFilter = vk::Filter::eLinear,
 		.addressModeU = vk::SamplerAddressMode::eClampToEdge,
 		.addressModeV = vk::SamplerAddressMode::eClampToEdge,
-	});
-	ERROR_IF(failed(result), "LUT Image Sampler could not be created");
-	device->set_object_name(lut_sampler, lut.name + " sampler");
+	}).value();
 
 	vk::AttachmentDescription attach_desc = {
 		.format = lut.format,
@@ -71,33 +59,19 @@ TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pip
 	};
 
 	// Renderpass
-	if (auto res = RenderPass::create("Transmittance LUT pass", _pipeline_factory->parent_device, {
+	renderpass = RenderPass::create("Transmittance LUT pass", device, {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency
-	})) {
-		renderpass = std::move(res.value());
-		INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
-	} else {
-		ERROR(std::fmt("Transmittance LUT pass creation failed" CODE_LOC "\n|> %s", res.error().what())) THEN_CRASH(res.error().code());
-	}
+	}).value();
 
 	// Framebuffer
-	tie(result, framebuffer) = device->device.createFramebuffer({
-		.renderPass = renderpass.renderpass,
-		.attachmentCount = 1,
-		.pAttachments = &lut_view.image_view,
-		.width = lut.extent.width,
-		.height = lut.extent.height,
-		.layers = 1,
-	});
-	ERROR_IF(failed(result), std::fmt("LUT Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
-	device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
+	framebuffer = Framebuffer::create("Transmittance LUT Framebuffer", borrow(renderpass), { borrow(lut_view) }, lut.layer_count).value();
 
-	if (auto res = parent_factory->create_pipeline({
+	pipeline = parent_factory->create_pipeline({
 		.renderpass = borrow(renderpass),
 		.viewport_state = {
 			.enable_dynamic = false,
@@ -123,13 +97,7 @@ TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pip
 		},
 		.shader_files = { R"(res/shaders/transmittance_lut.vs.spv)", R"(res/shaders/transmittance_lut.fs.spv)" },
 		.name = "LUT Pipeline",
-	})) {
-		pipeline = res.value();
-		INFO("LUT Pipeline Created");
-	} else {
-		auto result_ = res.error().code();
-		ERROR(std::fmt("LUT Pipeline creation failed with %s" CODE_LOC "\n|> %s", to_cstr(result_), res.error().what())) THEN_CRASH(result_);
-	}
+		}).value();
 
 	recalculate(_atmos);
 }
@@ -153,7 +121,7 @@ void TransmittanceContext::recalculate(const AtmosphereInfo& _atmos) {
 	vk::ClearValue clear_val(std::array{ 0.0f, 1.0f, 0.0f, 1.0f });
 	cmd->beginRenderPass({
 		.renderPass = renderpass.renderpass,
-		.framebuffer = framebuffer,
+		.framebuffer = framebuffer.framebuffer,
 		.renderArea = {
 			.offset = { 0, 0 },
 			.extent = { lut.extent.width, lut.extent.height },
@@ -181,10 +149,5 @@ void TransmittanceContext::recalculate(const AtmosphereInfo& _atmos) {
 }
 
 TransmittanceContext::~TransmittanceContext() {
-	auto& device = parent_factory->parent_device;
-
-	device->device.destroySampler(lut_sampler);
-
 	pipeline->destroy();
-	device->device.destroyFramebuffer(framebuffer);
 }

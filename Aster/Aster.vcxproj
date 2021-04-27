@@ -193,6 +193,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="core\buffer.cpp" />
+    <ClCompile Include="core\resource_pool.cc" />
     <ClCompile Include="core\framebuffer.cc" />
     <ClCompile Include="core\gui.cc" />
     <ClCompile Include="core\image.cpp" />
@@ -231,6 +232,7 @@
     <ClInclude Include="constants.h" />
     <ClInclude Include="core\buffer.h" />
     <ClInclude Include="core\camera.h" />
+    <ClInclude Include="core\resource_pool.h" />
     <ClInclude Include="core\framebuffer.h" />
     <ClInclude Include="core\gui.h" />
     <ClInclude Include="core\image.h" />

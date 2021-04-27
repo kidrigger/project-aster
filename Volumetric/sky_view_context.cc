@@ -10,7 +10,6 @@
 SkyViewContext::SkyViewContext(const Borrowed<PipelineFactory>& _pipeline_factory, const Borrowed<TransmittanceContext>& _transmittance)
 	: parent_factory{ _pipeline_factory } {
 
-	vk::Result result;
 	const auto& device = _pipeline_factory->parent_device;
 	const auto ubo_alignment = device->physical_device.properties.limits.minUniformBufferOffsetAlignment;
 
@@ -109,93 +108,38 @@ SkyViewContext::SkyViewContext(const Borrowed<PipelineFactory>& _pipeline_factor
 		}
 	};
 
-	tie(result, descriptor_pool) = device->device.createDescriptorPool({
-		.maxSets = 1,
-		.poolSizeCount = cast<u32>(pool_sizes.size()),
-		.pPoolSizes = pool_sizes.data(),
-	});
-	ERROR_IF(failed(result), std::fmt("Skyview LUT Descriptor pool creation failed with %s", to_cstr(result)));
-
-	std::vector<vk::DescriptorSet> descriptor_sets;
-	const auto& layout = pipeline->layout->descriptor_set_layouts.front();
-	tie(result, descriptor_sets) = device->device.allocateDescriptorSets({
-		.descriptorPool = descriptor_pool,
-		.descriptorSetCount = 1,
-		.pSetLayouts = &layout,
-	});
-	descriptor_set = descriptor_sets.front();
-	ERROR_IF(failed(result), std::fmt("Skyview LUT Descriptor creation failed with %s", to_cstr(result)));
+	resource_pool = ResourcePool::create(device, pipeline->layout, 1).value();
+	resource_set = resource_pool.allocate_resource_set().value();
 
 	{
-		usize cam_offset, sun_offset, atmos_offset;
 		usize offset = 0;
-		cam_offset = offset;
+		const auto cam_offset = offset;
 		offset += closest_multiple(sizeof(Camera), ubo_alignment);
-		sun_offset = offset;
+		const auto sun_offset = offset;
 		offset += closest_multiple(sizeof(SunData), ubo_alignment);
-		atmos_offset = offset;
+		const auto atmos_offset = offset;
 
-		std::vector<vk::DescriptorBufferInfo> buf_info = {
-			{
+		resource_set.set_buffer("camera", {
 				.buffer = ubo.buffer,
 				.offset = cam_offset,
 				.range = sizeof(Camera),
-			},
-			{
+		});
+		resource_set.set_buffer("sun",{
 				.buffer = ubo.buffer,
 				.offset = sun_offset,
 				.range = sizeof(SunData),
-			},
-			{
+		});
+		resource_set.set_buffer("atmos", {
 				.buffer = ubo.buffer,
 				.offset = atmos_offset,
 				.range = sizeof(AtmosphereInfo),
-			}
-		};
-
-		vk::DescriptorImageInfo image_info = {
+		});
+		resource_set.set_texture("transmittance_lut", {
 			.sampler = transmittance->lut_sampler.sampler,
 			.imageView = transmittance->lut_view.image_view,
 			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		};
-
-		vk::WriteDescriptorSet wd0 = {
-			.dstSet = descriptor_set,
-			.dstBinding = 0,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eUniformBuffer,
-			.pBufferInfo = &buf_info[0],
-		};
-
-		vk::WriteDescriptorSet wd1 = {
-			.dstSet = descriptor_set,
-			.dstBinding = 1,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eUniformBuffer,
-			.pBufferInfo = &buf_info[1],
-		};
-
-		vk::WriteDescriptorSet wd2 = {
-			.dstSet = descriptor_set,
-			.dstBinding = 2,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eUniformBuffer,
-			.pBufferInfo = &buf_info[2],
-		};
-
-		vk::WriteDescriptorSet wd3 = {
-			.dstSet = descriptor_set,
-			.dstBinding = 3,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-			.pImageInfo = &image_info,
-		};
-
-		device->device.updateDescriptorSets({ wd0, wd1, wd2, wd3 }, {});
+		});
+		resource_set.update();
 	}
 }
 
@@ -224,7 +168,7 @@ void SkyViewContext::recalculate(vk::CommandBuffer _cmd) {
 	}, vk::SubpassContents::eInline);
 
 	_cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->pipeline);
-	_cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->layout->layout, 0, { descriptor_set }, {});
+	_cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->layout->layout, 0, resource_set.sets, {});
 	_cmd.draw(4, 1, 0, 0);
 
 	_cmd.endRenderPass();
@@ -233,8 +177,5 @@ void SkyViewContext::recalculate(vk::CommandBuffer _cmd) {
 }
 
 SkyViewContext::~SkyViewContext() {
-	auto& device = parent_factory->parent_device;
-
-	device->device.destroyDescriptorPool(descriptor_pool);
 	pipeline->destroy();
 }

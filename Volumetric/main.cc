@@ -17,6 +17,7 @@
 #include <core/gui.h>
 #include <core/image.h>
 #include <core/image_view.h>
+#include <core/resource_pool.h>
 
 #include <util/buffer_writer.h>
 
@@ -199,29 +200,26 @@ i32 aster_main() {
 		ERROR(std::fmt("Pipeline creation failed with %s" CODE_LOC "\n|> %s", to_cstr(res.error().code()), res.error().what())) THEN_CRASH(res.error().code());
 	}
 
-	std::vector<vk::DescriptorPoolSize> pool_sizes = {
-		{
-			.type = vk::DescriptorType::eUniformBuffer,
-			.descriptorCount = swapchain->image_count * 3,
-		},
-		{
-			.type = vk::DescriptorType::eCombinedImageSampler,
-			.descriptorCount = swapchain->image_count
-		},
-		{
-			.type = vk::DescriptorType::eSampledImage,
-			.descriptorCount = swapchain->image_count
+	ResourcePool resource_pool;
+	if (auto res = ResourcePool::create(device.borrow(), pipeline->layout, swapchain->image_count)) {
+		resource_pool = std::move(res.value());
+		INFO(std::fmt("Resource Binders for pipeline %s successfully created", pipeline->name.c_str()));
+	} else {
+		ERROR(std::fmt("Resource Binders creation failed with %s" CODE_LOC "\n|> %s", to_cstr(res.error().code()), res.error().what())) THEN_CRASH(res.error().code());
+	}
+
+	std::vector<ResourceSet> resource_sets;
+	resource_sets.reserve(swapchain->image_count);
+	for (u32 i = 0; i < swapchain->image_count; ++i) {
+		if (auto res = resource_pool.allocate_resource_set()) {
+			resource_sets.push_back(std::move(res.value()));
 		}
-	};
-
-	vk::DescriptorPool descriptor_pool;
-	tie(result, descriptor_pool) = device->device.createDescriptorPool({
-		.maxSets = swapchain->image_count,
-		.poolSizeCount = cast<u32>(pool_sizes.size()),
-		.pPoolSizes = pool_sizes.data(),
-	});
-
-	std::vector<vk::DescriptorSet> descriptor_sets;
+		else {
+			ERROR(std::fmt("Resource set alloc failed " CODE_LOC " |> %s", res.error().what())) THEN_CRASH(res.error().code());
+		}
+	}
+	
+	/*std::vector<vk::DescriptorSet> descriptor_sets;
 	{
 		std::vector<vk::DescriptorSetLayout> layouts(swapchain->image_count, pipeline->layout->descriptor_set_layouts.front());
 		tie(result, descriptor_sets) = device->device.allocateDescriptorSets({
@@ -229,7 +227,7 @@ i32 aster_main() {
 			.descriptorSetCount = cast<u32>(layouts.size()),
 			.pSetLayouts = layouts.data(),
 		});
-	}
+	}*/
 
 	struct Frame {
 		vk::Semaphore image_available_sem;
@@ -339,76 +337,31 @@ i32 aster_main() {
 			uniform_buffer_writers.back() << camera << sun << atmosphere_info;
 		}
 
-		std::vector<vk::DescriptorBufferInfo> buf_info = {
-			{
+		resource_sets[i].set_buffer("camera", {
 				.buffer = ubo_->buffer,
 				.offset = 0,
 				.range = sizeof(Camera),
-			},
-			{
+			});
+		resource_sets[i].set_buffer("sun", {
 				.buffer = ubo_->buffer,
 				.offset = closest_multiple(sizeof(Camera), ubo_alignment),
 				.range = sizeof(SunData),
-			},
-			{
+			});
+		resource_sets[i].set_buffer("atmos", {
 				.buffer = ubo_->buffer,
 				.offset = closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment),
 				.range = sizeof(AtmosphereInfo),
-			}
-		};
-
-		vk::DescriptorImageInfo transmittance_image_info = {
+			});
+		resource_sets[i].set_texture("transmittance_lut", {
 			.sampler = transmittance->lut_sampler.sampler,
 			.imageView = transmittance->lut_view.image_view,
 			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		};
-
-		vk::DescriptorImageInfo sky_view_image_info = {
+			});
+		resource_sets[i].set_texture("skyview_lut", {
 			.imageView = sky_view->lut_view.image_view,
 			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-		};
-
-		device->device.updateDescriptorSets({
-			{
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 0,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[0],
-			},
-			{
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 1,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[1],
-			},
-			{
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 2,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[2],
-			},
-			{
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 3,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-				.pImageInfo = &transmittance_image_info,
-			},
-			{
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 4,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eSampledImage,
-				.pImageInfo = &sky_view_image_info,
-			} }, {});
+			});
+		resource_sets[i].update();
 	}
 
 	AtmosphereInfo atmosphere_ui_view = {
@@ -581,7 +534,7 @@ i32 aster_main() {
 			} });
 
 		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->layout->layout, 0, { descriptor_sets[frame_idx] }, {});
+		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->layout->layout, 0, resource_sets[frame_idx].sets, {});
 		cmd.draw(4, 1, 0, 0);
 
 		cmd.endRenderPass();
@@ -640,8 +593,6 @@ i32 aster_main() {
 	for (auto& frame : frames) {
 		frame.destroy();
 	}
-
-	device->device.destroyDescriptorPool(descriptor_pool);
 
 	pipeline->destroy();
 	for (auto& framebuffer_ : framebuffers) {

@@ -10,15 +10,14 @@
 #include <core/pipeline.h>
 #include <core/image.h>
 #include <core/image_view.h>
+#include <core/camera.h>
+#include <core/resource_pool.h>
+#include <core/framebuffer.h>
 
 #include <sun_data.h>
 #include <transmittance_context.h>
 
-#include <core/camera.h>
-
 #include <util/buffer_writer.h>
-
-#include "core/framebuffer.h"
 
 struct SkyViewContext {
 	static constexpr vk::Extent3D sky_view_lut_extent = { 192, 108, 1 };
@@ -39,8 +38,12 @@ struct SkyViewContext {
 	Pipeline* pipeline{};
 	RenderPass renderpass;
 	Framebuffer framebuffer;
-	vk::DescriptorPool descriptor_pool;
-	vk::DescriptorSet descriptor_set;
+
+	ResourcePool resource_pool;
+	ResourceSet resource_set;
+	
+	//vk::DescriptorPool descriptor_pool;
+	//vk::DescriptorSet descriptor_set;
 	Buffer ubo;
 	BufferWriter ubo_writer;
 

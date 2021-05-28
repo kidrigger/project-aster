@@ -20,7 +20,7 @@
 #include <util/buffer_writer.h>
 
 struct SkyViewContext {
-	static constexpr vk::Extent3D sky_view_lut_extent = { 192, 108, 1 };
+	static constexpr vk::Extent3D sky_view_lut_extent = { 256, 128, 1 };
 
 	SkyViewContext(const Borrowed<PipelineFactory>& _pipeline_factory, const Borrowed<TransmittanceContext>& _transmittance);
 

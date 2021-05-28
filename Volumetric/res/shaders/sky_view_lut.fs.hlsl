@@ -87,7 +87,6 @@ FSOut main(FSIn input) {
 
 	const float2 longlat = get_skyview_longlat_from_uv(input.uv);
 	output.color = float4(get_skyview(longlat), 1.0f);
-	output.color = output.color / (1.0f + output.color);
 
 	return output;
 }

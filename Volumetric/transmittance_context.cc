@@ -13,7 +13,7 @@ TransmittanceContext::TransmittanceContext(const Borrowed<PipelineFactory>& _pip
 
 	const auto& device = _pipeline_factory->parent_device;
 
-	lut = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled).value();
+	lut = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR32G32B32A32Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled).value();
 
 	lut_view = ImageView::create(borrow(lut), vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,

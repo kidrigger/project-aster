@@ -15,7 +15,6 @@
 #include <core/swapchain.h>
 #include <core/camera.h>
 #include <core/gui.h>
-#include <core/image.h>
 #include <core/image_view.h>
 #include <core/resource_pool.h>
 
@@ -218,16 +217,6 @@ i32 aster_main() {
 			ERROR(std::fmt("Resource set alloc failed " CODE_LOC " |> %s", res.error().what())) THEN_CRASH(res.error().code());
 		}
 	}
-	
-	/*std::vector<vk::DescriptorSet> descriptor_sets;
-	{
-		std::vector<vk::DescriptorSetLayout> layouts(swapchain->image_count, pipeline->layout->descriptor_set_layouts.front());
-		tie(result, descriptor_sets) = device->device.allocateDescriptorSets({
-			.descriptorPool = descriptor_pool,
-			.descriptorSetCount = cast<u32>(layouts.size()),
-			.pSetLayouts = layouts.data(),
-		});
-	}*/
 
 	struct Frame {
 		vk::Semaphore image_available_sem;

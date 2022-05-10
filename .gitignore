@@ -9,3 +9,5 @@
 /.vscode
 /Volumetric/x64
 /Aster.sln.DotSettings.user
+/CoreTest/x64/Debug/CoreTest.tlog
+/CoreTest/x64/Debug

@@ -196,6 +196,9 @@ void Swapchain::recreate() {
 		ERROR(std::fmt("Could not fetch images with %s", to_cstr(res))) THEN_CRASH(res);
 	}
 
+	const auto res = parent_device->device.waitIdle();
+	ERROR_IF(failed(res), std::fmt("Idling failed with %s", to_cstr(result)));
+
 	auto i_ = 0;
 	image_views.clear();
 	image_views.reserve(images.size());

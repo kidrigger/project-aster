@@ -61,8 +61,8 @@ private:
 	std::vector<Err> err_list_;
 };
 
-template <typename Ok = void>
-using Res = tl::expected<Ok, Err>;
+template <typename Ok = void, typename NotOk = Err>
+using Res = tl::expected<Ok, NotOk>;
 
 [[nodiscard]]
 inline bool failed(const vk::Result _result) {

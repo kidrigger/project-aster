@@ -308,36 +308,36 @@ i32 aster_main() {
 #pragma endregion
 
 	// ======== Buffer Setup ==================================================================================================================
-	std::vector<Owned<Buffer>> uniform_buffers;
+	std::vector<Buffer> uniform_buffers;
 	uniform_buffers.reserve(swapchain->image_count);
 	std::vector<BufferWriter> uniform_buffer_writers;
 	uniform_buffer_writers.reserve(swapchain->image_count);
 	const auto ubo_alignment = device->physical_device.properties.limits.minUniformBufferOffsetAlignment;
 	for (u32 i = 0; i < swapchain->image_count; ++i) {
 		if (auto res = Buffer::create(std::fmt("Camera Ubo %i", i), device.borrow(), closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu)) {
-			uniform_buffers.emplace_back(new Buffer{ std::move(res.value()) });
+			uniform_buffers.emplace_back(std::move(res.value()));
 		} else {
 			ERROR(std::fmt("Camera uniform buffer creation failed \n|> %s", res.error().what())) THEN_CRASH(res.error().code());
 		}
 
 		auto& ubo_ = uniform_buffers.back();
-		uniform_buffer_writers.emplace_back(BufferWriter{ ubo_.borrow() });
+		uniform_buffer_writers.emplace_back(BufferWriter{ borrow(ubo_) });
 		{
 			uniform_buffer_writers.back() << camera << sun << atmosphere_info;
 		}
 
 		resource_sets[i].set_buffer("camera", {
-				.buffer = ubo_->buffer,
+				.buffer = ubo_.buffer,
 				.offset = 0,
 				.range = sizeof(Camera),
 			});
 		resource_sets[i].set_buffer("sun", {
-				.buffer = ubo_->buffer,
+				.buffer = ubo_.buffer,
 				.offset = closest_multiple(sizeof(Camera), ubo_alignment),
 				.range = sizeof(SunData),
 			});
 		resource_sets[i].set_buffer("atmos", {
-				.buffer = ubo_->buffer,
+				.buffer = ubo_.buffer,
 				.offset = closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment),
 				.range = sizeof(AtmosphereInfo),
 			});
@@ -393,7 +393,8 @@ i32 aster_main() {
 			tie(result, image_idx) = device->device.acquireNextImageKHR(swapchain->swapchain, max_value<u32>, current_frame->image_available_sem, {});
 
 			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain->name.data()))
-			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain->name) DO(swapchain->recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
+			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain->name)
+				DO(swapchain->recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
 			ELSE_IF_ERROR(failed(result), std::fmt("Image acquire failed with %s", to_cstr(result))) THEN_CRASH(result)
 			ELSE_VERBOSE("Image Acquired");
 		}

@@ -284,6 +284,11 @@ public:
 			ERROR_IF(_idx >= device_set_.size(), "Out of range");
 			return device_set_[_idx];
 		}
+
+		[[nodiscard]]
+		std::vector<PhysicalDeviceInfo> get_all() const {
+			return std::vector<PhysicalDeviceInfo>(device_set_.begin(), device_set_.end());
+		}
 	};
 
 	DeviceSelector(Borrowed<Context>&& _context, Borrowed<Window>&& _window) {
@@ -313,6 +318,10 @@ public:
 	PhysicalDeviceInfo get(const u32 _idx = 0) {
 		ERROR_IF(_idx >= device_set_.size(), "Out of range");
 		return device_set_[_idx];
+	}
+	
+	std::vector<PhysicalDeviceInfo> get_all() {
+		return device_set_;
 	}
 
 private:

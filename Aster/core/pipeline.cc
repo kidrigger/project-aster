@@ -123,7 +123,7 @@ Res<std::vector<Shader*>> PipelineFactory::create_shaders(const std::vector<std:
 		auto res = create_shader_module(name);
 		if (!res) {
 			cleanup_shaders();
-			return Err::make(std::fmt("Shader %s creation failed." CODE_LOC, name.data()), std::move(res.error()));
+			return Err::make(std::fmt("Shader %s creation failed with %s " CODE_LOC "\n|> %s", name.data(), to_cstr(res.error().code()), res.error().what()), std::move(res.error()));
 		}
 		shaders.emplace_back(res.value());
 	}
@@ -572,7 +572,7 @@ Res<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreateInfo& _creat
 	if (auto res = create_shaders(_create_info.shader_files)) {
 		shaders = std::move(res.value());
 	} else {
-		return Err::make("Shader creation failed" CODE_LOC, std::move(res.error()));
+		return Err::make(std::fmt("Shader creation failed with %s" CODE_LOC "\n|> %s", to_cstr(res.error().code()), res.error().what()), std::move(res.error()));
 	}
 
 	Layout* pipeline_layout;
@@ -583,7 +583,7 @@ Res<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreateInfo& _creat
 		pipeline_layout = res.value();
 	} else {
 		cleanup_shaders();
-		return Err::make(std::fmt("Pipeline layout creation for %s failed" CODE_LOC, _create_info.name.c_str()), std::move(res.error()));
+		return Err::make(std::fmt("Pipeline layout creation for %s failed with %s " CODE_LOC "\n|> %s", _create_info.name.c_str(), to_cstr(res.error().code()), res.error().what()), std::move(res.error()));
 	}
 
 	std::vector<ShaderStage> shader_stages(shaders.size());
@@ -599,14 +599,16 @@ Res<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreateInfo& _creat
 		});
 
 		if (match_iv == in_attr.end()) {
+			auto err_str = std::fmt("Attribute %s required by shader, not found" CODE_LOC, ivs.name.c_str());
 			cleanup_shaders();
 			cleanup_layout();
-			return Err::make(std::fmt("Attribute %s required by shader, not found" CODE_LOC, ivs.name.c_str()));
+			return Err::make(err_str);
 		}
 		if (match_iv->format != ivs.format) {
+			auto err_str = std::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)" CODE_LOC, ivs.name.c_str(), to_cstr(ivs.format), to_cstr(match_iv->format));
 			cleanup_shaders();
 			cleanup_layout();
-			return Err::make(std::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)" CODE_LOC, ivs.name.c_str(), to_cstr(ivs.format), to_cstr(match_iv->format)));
+			return Err::make(err_str);
 		}
 
 		input_attributes[ivs.location] = {

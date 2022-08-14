@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: window.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include "window.h"
@@ -64,6 +64,7 @@ Window& Window::operator=(Window&& _other) noexcept {
 Window::~Window() {
 	if (parent_context && surface) {
 		parent_context->instance.destroy(surface);
+		parent_context = nullptr;
 		INFO("Surface Destroyed");
 	}
 

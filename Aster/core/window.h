@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: window.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -20,11 +20,11 @@ struct Window final {
 
 	~Window();
 
-	bool should_close() noexcept {
+	bool should_close() const noexcept {
 		return glfwWindowShouldClose(window);
 	}
 
-	bool poll() noexcept {
+	bool poll() const noexcept {
 		glfwPollEvents();
 		return !glfwWindowShouldClose(window);
 	}

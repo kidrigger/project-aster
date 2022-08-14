@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: files.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once

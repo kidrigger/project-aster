@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: global.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -85,7 +85,7 @@ inline usize hash_combine(usize _hash0, usize _hash1) {
 
 struct Time {
 	static constexpr f64 max_delta = 0.1;
-	
+
 	f64 elapsed;
 	f64 delta;
 

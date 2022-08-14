@@ -15,6 +15,8 @@
 #include <core/swapchain.h>
 #include <core/camera.h>
 #include <core/gui.h>
+#include <core/image.h>
+#include <core/image_view.h>
 
 #include <util/buffer_writer.h>
 
@@ -104,7 +106,7 @@ i32 aster_main() {
 	vk::Result result;
 	Pipeline* pipeline;
 	RenderPass render_pass;
-	std::vector<vk::Framebuffer> framebuffers;
+	std::vector<Framebuffer> framebuffers;
 
 	vk::AttachmentDescription attach_desc = {
 		.format = swapchain.format,
@@ -151,19 +153,12 @@ i32 aster_main() {
 		[&render_pass, &device, &framebuffers, &swapchain]() {
 			vk::Result result_;
 			for (auto& fb : framebuffers) {
-				device.device.destroyFramebuffer(fb);
+				fb.destroy();
 			}
 			framebuffers.resize(swapchain.image_count);
 
 			for (u32 i = 0; i < swapchain.image_count; ++i) {
-				tie(result_, framebuffers[i]) = device.device.createFramebuffer({
-					.renderPass = render_pass.renderpass,
-					.attachmentCount = 1,
-					.pAttachments = &swapchain.image_views[i],
-					.width = swapchain.extent.width,
-					.height = swapchain.extent.height,
-					.layers = 1,
-				});
+				tie(result_, framebuffers[i]) = Framebuffer::create("Present Framebuffer", &render_pass, { swapchain.image_views[i] }, 1);
 				ERROR_IF(failed(result_), std::fmt("Framebuffer creation failed with %s", to_cstr(result_))) THEN_CRASH(result_) ELSE_INFO("Framebuffer Created");
 			}
 		}
@@ -330,7 +325,7 @@ i32 aster_main() {
 			};
 
 			vk::DescriptorImageInfo transmittance_image_info = {
-				.sampler = transmittance.lut_sampler,
+				.sampler = transmittance.lut_sampler.sampler,
 				.imageView = transmittance.lut_view.image_view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 			};
@@ -410,13 +405,13 @@ i32 aster_main() {
 
 		{
 			OPTICK_EVENT("Frame wait");
-			result = device.device.waitForFences({ current_frame->in_flight_fence }, true, max_value<u64>);
+			result = device.device.waitForFences({ current_frame->in_flight_fence }, true, MAX_VALUE<u64>);
 		}
 
 		{
 			OPTICK_EVENT("Acquire");
 
-			tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, max_value<u32>, current_frame->image_available_sem, {});
+			tie(result, image_idx) = device.device.acquireNextImageKHR(swapchain.swapchain, MAX_VALUE<u32>, current_frame->image_available_sem, {});
 
 			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain.name.data()))
 			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
@@ -487,7 +482,7 @@ i32 aster_main() {
 
 		{
 			OPTICK_EVENT("Image wait");
-			result = device.device.waitForFences({ in_flight_frames[image_idx]->in_flight_fence }, true, max_value<u64>);
+			result = device.device.waitForFences({ in_flight_frames[image_idx]->in_flight_fence }, true, MAX_VALUE<u64>);
 			ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Waited for");
 			in_flight_frames[image_idx] = current_frame;
 		}
@@ -528,7 +523,7 @@ i32 aster_main() {
 
 		cmd.beginRenderPass({
 			.renderPass = render_pass.renderpass,
-			.framebuffer = framebuffers[image_idx],
+			.framebuffer = framebuffers[image_idx].framebuffer,
 			.renderArea = {
 				.offset = { 0, 0 },
 				.extent = swapchain.extent,
@@ -621,7 +616,7 @@ i32 aster_main() {
 
 	pipeline->destroy();
 	for (auto& framebuffer_ : framebuffers) {
-		device.device.destroyFramebuffer(framebuffer_);
+		framebuffer_.destroy();
 	}
 	render_pass.destroy();
 

@@ -10,6 +10,12 @@
 #include <core/pipeline.h>
 #include <atmosphere_info.h>
 
+
+#include "core/framebuffer.h"
+#include "core/image.h"
+#include "core/image_view.h"
+#include "core/sampler.h"
+
 struct TransmittanceContext {
 	static constexpr vk::Extent3D transmittance_lut_extent = { 64, 256, 1 };
 
@@ -28,11 +34,11 @@ struct TransmittanceContext {
 
 	Pipeline* pipeline{};
 	RenderPass renderpass;
-	vk::Framebuffer framebuffer;
+	Framebuffer framebuffer;
 
 	Image lut;
 	ImageView lut_view;
-	vk::Sampler lut_sampler;
+	Sampler lut_sampler;
 
 	PipelineFactory* parent_factory;
 };

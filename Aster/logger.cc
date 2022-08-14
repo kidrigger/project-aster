@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: logger.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include "logger.h"

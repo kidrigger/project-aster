@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: gui.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -8,6 +8,7 @@
 #pragma warning(push, 0)
 #pragma warning(pop)
 
+#include <stdafx.h>
 #include <core/swapchain.h>
 #include <imgui/imgui.h>
 

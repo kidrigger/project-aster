@@ -1,12 +1,14 @@
 // =============================================
 //  Aster: device.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include "device.h"
 
 #include <core/context.h>
 #include <core/window.h>
+
+#include <core/buffer.h>
 
 #include <vector>
 #include <map>
@@ -169,7 +171,7 @@ SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>
 	return handle;
 }
 
-void Device::update_data(Buffer* _host_buffer, const std::span<u8>& _data) {
+void Device::update_data(Buffer* _host_buffer, const std::span<u8>& _data) const {
 
 	ERROR_IF(_host_buffer->memory_usage != vma::MemoryUsage::eCpuToGpu &&
 		_host_buffer->memory_usage != vma::MemoryUsage::eCpuOnly, "Memory is not on CPU so mapping can't be done. Use upload_data");
@@ -187,7 +189,7 @@ void Device::set_name(const std::string& _name) {
 	set_object_name(device, std::fmt("%s Device", _name.data()));
 }
 
-QueueFamilyIndices DeviceSelector::PhysicalDeviceInfo::get_queue_families(const Window* _window, vk::PhysicalDevice _device) {
+QueueFamilyIndices DeviceSelector::PhysicalDeviceInfo::get_queue_families(const Window* _window, vk::PhysicalDevice _device) const {
 	QueueFamilyIndices indices;
 
 	auto queue_families_ = _device.getQueueFamilyProperties();
@@ -243,101 +245,4 @@ QueueFamilyIndices DeviceSelector::PhysicalDeviceInfo::get_queue_families(const 
 	}
 
 	return indices;
-}
-
-vk::ResultValue<Buffer> Buffer::create(const std::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
-	auto [result, buffer] = _device->allocator.createBuffer({
-		.size = _size,
-		.usage = _usage,
-		.sharingMode = vk::SharingMode::eExclusive,
-	}, {
-		.usage = _memory_usage,
-	});
-
-	if (!failed(result)) {
-		_device->set_object_name(buffer.first, _name);
-	}
-
-	return vk::ResultValue<Buffer>(result, {
-		.parent_device = _device,
-		.buffer = buffer.first,
-		.allocation = buffer.second,
-		.usage = _usage,
-		.memory_usage = _memory_usage,
-		.size = _size,
-		.name = _name,
-	});
-}
-
-void Buffer::destroy() {
-	parent_device->allocator.destroyBuffer(buffer, allocation);
-}
-
-vk::ResultValue<Image> Image::create(const std::string& _name, Device* _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count, vma::MemoryUsage _memory_usage, u32 _layer_count) {
-
-	auto [result, image] = _device->allocator.createImage({
-		.imageType = _image_type,
-		.format = _format,
-		.extent = _extent,
-		.mipLevels = _mip_count,
-		.arrayLayers = _layer_count,
-		.samples = vk::SampleCountFlagBits::e1,
-		.tiling = vk::ImageTiling::eOptimal,
-		.usage = _usage,
-		.sharingMode = vk::SharingMode::eExclusive,
-		.initialLayout = vk::ImageLayout::eUndefined,
-	}, {
-		.usage = _memory_usage,
-	});
-
-	if (!failed(result)) {
-		_device->set_object_name(image.first, _name);
-	}
-
-	return vk::ResultValue<Image>(result, {
-		.parent_device = _device,
-		.image = image.first,
-		.allocation = image.second,
-		.usage = _usage,
-		.memory_usage = _memory_usage,
-		.name = _name,
-		.type = _image_type,
-		.format = _format,
-		.extent = _extent,
-		.layer_count = _layer_count,
-		.mip_count = _mip_count,
-	});
-}
-
-void Image::destroy() {
-	parent_device->allocator.destroyImage(image, allocation);
-}
-
-vk::ResultValue<ImageView> ImageView::create(Image* _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range) {
-
-	auto [result, image_view] = _image->parent_device->device.createImageView({
-		.image = _image->image,
-		.viewType = _image_type,
-		.format = _image->format,
-		.subresourceRange = _subresource_range,
-	});
-
-	const auto name = std::fmt("%s view", _image->name.c_str());
-
-	if (!failed(result)) {
-		_image->parent_device->set_object_name(image_view, name);
-	}
-
-	return vk::ResultValue<ImageView>(result, {
-		.parent_image = _image,
-		.image_view = image_view,
-		.format = _image->format,
-		.type = _image_type,
-		.subresource_range = _subresource_range,
-		.name = name
-	});
-}
-
-void ImageView::destroy() {
-	parent_image->parent_device->device.destroyImageView(image_view);
 }

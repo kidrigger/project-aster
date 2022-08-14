@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: gui.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include "gui.h"
@@ -13,10 +13,12 @@
 
 #include <optick/optick.h>
 
+#include "framebuffer.h"
+
 namespace ImGui {
 	vk::DescriptorPool descriptor_pool;
-	vk::RenderPass renderpass;
-	std::vector<vk::Framebuffer> framebuffers;
+	RenderPass renderpass;
+	std::vector<Framebuffer> framebuffers;
 
 	Swapchain* current_swapchain;
 
@@ -86,7 +88,7 @@ namespace ImGui {
 		};
 
 		// Renderpass
-		tie(result, renderpass) = device_->device.createRenderPass({
+		tie(result, renderpass) = RenderPass::create("UI pass", device_, {
 			.attachmentCount = 1,
 			.pAttachments = &attach_desc,
 			.subpassCount = 1,
@@ -95,7 +97,6 @@ namespace ImGui {
 			.pDependencies = &dependency
 		});
 		ERROR_IF(failed(result), std::fmt("Renderpass creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("UI pass Created");
-		device_->set_object_name(renderpass, "UI pass");
 
 		IMGUI_CHECKVERSION();
 		CreateContext();
@@ -121,7 +122,7 @@ namespace ImGui {
 			.Allocator = nullptr,
 			.CheckVkResultFn = vulkan_assert,
 		};
-		ImGui_ImplVulkan_Init(&init_info, renderpass);
+		ImGui_ImplVulkan_Init(&init_info, renderpass.renderpass);
 
 		vk::CommandBuffer cmd;
 		tie(result, cmd) = device_->alloc_temp_command_buffer(device_->transfer_cmd_pool);
@@ -138,14 +139,14 @@ namespace ImGui {
 
 		framebuffers.reserve(_swapchain->image_count);
 		for (auto& iv : _swapchain->image_views) {
-			tie(result, framebuffers.emplace_back()) = device_->device.createFramebuffer({
+			tie(result, framebuffers.emplace_back()) = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1); /*device_->device.createFramebuffer({
 				.renderPass = renderpass,
 				.attachmentCount = 1,
 				.pAttachments = &iv,
 				.width = _swapchain->extent.width,
 				.height = _swapchain->extent.height,
 				.layers = 1,
-			});
+			});*/
 			ERROR_IF(failed(result), std::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
 		}
 
@@ -156,9 +157,9 @@ namespace ImGui {
 	void Destroy() {
 		current_swapchain->parent_device->device.destroyDescriptorPool(descriptor_pool);
 		for (auto& fb : framebuffers) {
-			current_swapchain->parent_device->device.destroyFramebuffer(fb);
+			fb.destroy();
 		}
-		current_swapchain->parent_device->device.destroyRenderPass(renderpass);
+		renderpass.destroy();
 		current_swapchain = nullptr;
 
 		ImGui_ImplVulkan_Shutdown();
@@ -169,19 +170,12 @@ namespace ImGui {
 	void Recreate() {
 		vk::Result result;
 		for (auto& fb : framebuffers) {
-			current_swapchain->parent_device->device.destroyFramebuffer(fb);
+			fb.destroy();
 		}
 		framebuffers.clear();
 		framebuffers.reserve(current_swapchain->image_count);
 		for (auto& iv : current_swapchain->image_views) {
-			tie(result, framebuffers.emplace_back()) = current_swapchain->parent_device->device.createFramebuffer({
-				.renderPass = renderpass,
-				.attachmentCount = 1,
-				.pAttachments = &iv,
-				.width = current_swapchain->extent.width,
-				.height = current_swapchain->extent.height,
-				.layers = 1,
-			});
+			tie(result, framebuffers.emplace_back()) = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1);
 			ERROR_IF(failed(result), std::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
 		}
 	}
@@ -221,7 +215,7 @@ namespace ImGui {
 
 		// DockSpace
 		if (GetIO().ConfigFlags & ImGuiConfigFlags_DockingEnable) {
-			ImGuiID dockspace_id = GetID("MyDockSpace");
+			const ImGuiID dockspace_id = GetID("MyDockSpace");
 			DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
 		}
 	}
@@ -247,8 +241,8 @@ namespace ImGui {
 			.color = std::array{ 0.0f, 0.0f, 1.0f, 1.0f },
 		});
 		_cmd.beginRenderPass({
-			.renderPass = renderpass,
-			.framebuffer = framebuffers[_image_idx],
+			.renderPass = renderpass.renderpass,
+			.framebuffer = framebuffers[_image_idx].framebuffer,
 			.renderArea = {
 				.offset = { 0, 0 },
 				.extent = current_swapchain->extent,

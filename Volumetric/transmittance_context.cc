@@ -7,6 +7,8 @@
 
 #include <renderdoc/renderdoc.h>
 #include <optick/optick.h>
+#include <core/image.h>
+#include <core/image_view.h>
 
 TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, const AtmosphereInfo& _atmos)
 	: parent_factory{ _pipeline_factory } {
@@ -26,14 +28,13 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 	});
 	ERROR_IF(failed(result), "LUT Image View could not be created");
 
-	tie(result, lut_sampler) = device->device.createSampler({
+	tie(result, lut_sampler) = Sampler::create("LUT Image Sampler", device, {
 		.magFilter = vk::Filter::eLinear,
 		.minFilter = vk::Filter::eLinear,
 		.addressModeU = vk::SamplerAddressMode::eClampToEdge,
 		.addressModeV = vk::SamplerAddressMode::eClampToEdge,
 	});
 	ERROR_IF(failed(result), "LUT Image Sampler could not be created");
-	device->set_object_name(lut_sampler, lut.name + " sampler");
 
 	vk::AttachmentDescription attach_desc = {
 		.format = lut.format,
@@ -77,16 +78,8 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 	ERROR_IF(failed(result), std::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result))) THEN_CRASH(result) ELSE_INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
 
 	// Framebuffer
-	tie(result, framebuffer) = device->device.createFramebuffer({
-		.renderPass = renderpass.renderpass,
-		.attachmentCount = 1,
-		.pAttachments = &lut_view.image_view,
-		.width = lut.extent.width,
-		.height = lut.extent.height,
-		.layers = 1,
-	});
+	tie(result, framebuffer) = Framebuffer::create("LUT Framebuffer", &renderpass, { lut_view }, 1);
 	ERROR_IF(failed(result), std::fmt("LUT Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
-	device->set_object_name(framebuffer, "Transmittance LUT Framebuffer");
 
 	tie(result, pipeline) = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
@@ -138,7 +131,7 @@ void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const
 	vk::ClearValue clear_val(std::array{ 0.0f, 1.0f, 0.0f, 1.0f });
 	cmd.beginRenderPass({
 		.renderPass = renderpass.renderpass,
-		.framebuffer = framebuffer,
+		.framebuffer = framebuffer.framebuffer,
 		.renderArea = {
 			.offset = { 0, 0 },
 			.extent = { lut.extent.width, lut.extent.height },
@@ -169,13 +162,11 @@ void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const
 }
 
 TransmittanceContext::~TransmittanceContext() {
-	auto* device = parent_factory->parent_device;
-
 	lut.destroy();
 	lut_view.destroy();
-	device->device.destroySampler(lut_sampler);
+	lut_sampler.destroy();
 
 	pipeline->destroy();
-	device->device.destroyFramebuffer(framebuffer);
+	framebuffer.destroy();
 	renderpass.destroy();
 }

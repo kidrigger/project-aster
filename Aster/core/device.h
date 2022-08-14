@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: device.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -13,7 +13,8 @@
 #include <span>
 #include <string_view>
 
-struct Device;
+class Device;
+struct Buffer;
 
 struct QueueFamilyIndices {
 	static constexpr u32 invalid_value = 0xFFFFFFFFu;
@@ -51,57 +52,11 @@ struct Queues {
 	Option<vk::Queue> compute;
 };
 
-struct Buffer {
-	Device* parent_device;
-	vk::Buffer buffer;
-	vma::Allocation allocation;
-	vk::BufferUsageFlags usage;
-	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
-	usize size = 0;
-	std::string name;
-
-	static vk::ResultValue<Buffer> create(const std::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage);
-
-	void destroy();
-};
-
-struct Image {
-	Device* parent_device;
-	vk::Image image;
-	vma::Allocation allocation;
-	vk::ImageUsageFlags usage;
-	vma::MemoryUsage memory_usage = vma::MemoryUsage::eUnknown;
-	usize size = 0;
-	std::string name;
-
-	vk::ImageType type;
-	vk::Format format;
-	vk::Extent3D extent;
-	u32 layer_count;
-	u32 mip_count;
-
-	static vk::ResultValue<Image> create(const std::string& _name, Device* _device, vk::ImageType _image_type, vk::Format _format, const vk::Extent3D& _extent, vk::ImageUsageFlags _usage, u32 _mip_count = 1, vma::MemoryUsage _memory_usage = vma::MemoryUsage::eGpuOnly, u32 _layer_count = 1);
-
-	void destroy();
-};
-
-struct ImageView {
-	Image* parent_image;
-	vk::ImageView image_view;
-	vk::Format format;
-	vk::ImageViewType type;
-	vk::ImageSubresourceRange subresource_range;
-	std::string name;
-
-	static vk::ResultValue<ImageView> create(Image* _image, vk::ImageViewType _image_type, const vk::ImageSubresourceRange& _subresource_range);
-
-	void destroy();
-};
-
 template <typename T>
 struct SubmitTask;
 
-struct Device {
+class Device final {
+public:
 	struct PhysicalDeviceInfo {
 		vk::PhysicalDevice device;
 		vk::PhysicalDeviceProperties properties;
@@ -115,7 +70,7 @@ struct Device {
 		}
 
 	private:
-		QueueFamilyIndices get_queue_families(const Window* _window, vk::PhysicalDevice _device);
+		QueueFamilyIndices get_queue_families(const Window* _window, vk::PhysicalDevice _device) const;
 	};
 
 	Device(const std::string_view& _name, Context* _context, const PhysicalDeviceInfo& _physical_device_info, const vk::PhysicalDeviceFeatures& _enabled_features);
@@ -137,7 +92,7 @@ struct Device {
 		WARN_IF(failed(result), "Debug Utils name setting failed with "s + to_string(result));
 	}
 
-	vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) {
+	[[nodiscard]] vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) const {
 		vk::CommandBuffer cmd;
 		vk::CommandBufferAllocateInfo cmd_buf_alloc_info = {
 			.commandPool = _pool,
@@ -149,7 +104,7 @@ struct Device {
 	}
 
 	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const std::span<u8>& _data);
-	void update_data(Buffer* _host_buffer, const std::span<u8>& _data);
+	void update_data(Buffer* _host_buffer, const std::span<u8>& _data) const;
 
 	// fields
 	Context* parent_context;
@@ -205,7 +160,7 @@ struct SubmitTask {
 	}
 
 	[[nodiscard]] vk::Result destroy() {
-		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+		const auto result = device->device.waitForFences({ fence }, true, MAX_VALUE<u64>);
 		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result)));
 		payload.destroy();
 		device->device.destroyFence(fence);
@@ -247,10 +202,12 @@ struct SubmitTask<void> {
 	}
 
 	[[nodiscard]] vk::Result destroy() {
-		const auto result = device->device.waitForFences({ fence }, true, max_value<u64>);
+		const auto result = device->device.waitForFences({ fence }, true, MAX_VALUE<u64>);
 		ERROR_IF(failed(result), std::fmt("Fence wait failed with %s", to_cstr(result)));
 		device->device.destroyFence(fence);
+		fence = nullptr;
 		device->device.freeCommandBuffers(pool, cast<u32>(cmd.size()), cmd.data());
+		cmd.clear();
 		return result;
 	}
 };
@@ -280,7 +237,7 @@ public:
 			return DeviceSelectorIntermediate{ device_set_ };
 		}
 
-		PhysicalDeviceInfo get(const u32 _idx = 0) {
+		PhysicalDeviceInfo get(const u32 _idx = 0) const {
 			ERROR_IF(_idx >= device_set_.size(), "Out of range");
 			return device_set_[_idx];
 		}
@@ -288,7 +245,7 @@ public:
 
 	DeviceSelector(const Context* _context, const Window* _window) {
 		auto [result, available_physical_devices] = _context->instance.enumeratePhysicalDevices();
-		ERROR_IF(failed(result), "Failed fetching devices with "s + to_string(result)) THEN_CRASH(result) ELSE_IF_ERROR(available_physical_devices.empty(), "No valid devices found") THEN_CRASH(Error::eNoDevices);
+		ERROR_IF(failed(result), "Failed fetching devices with "s + to_string(result)) THEN_CRASH(result) ELSE_IF_ERROR(available_physical_devices.empty(), "No valid devices found") THEN_CRASH(ErrorCode::eNoDevices);
 
 		std::ranges::transform(available_physical_devices, std::back_inserter(device_set_),
 			[window = _window](const vk::PhysicalDevice _dev) {

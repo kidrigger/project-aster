@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: renderpass.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -52,5 +52,9 @@ vk::ResultValue<RenderPass> RenderPass::create(const std::string& _name, Device*
 }
 
 void RenderPass::destroy() {
-	parent_device->device.destroyRenderPass(renderpass);
+	if (parent_device && renderpass) {
+		parent_device->device.destroyRenderPass(renderpass);
+		parent_device = nullptr;
+		renderpass = nullptr;
+	}
 }

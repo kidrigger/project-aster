@@ -5,6 +5,9 @@
 
 #include "sky_view_context.h"
 
+
+#include "core/image.h"
+#include "core/image_view.h"
 #include "optick/optick.h"
 
 SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, TransmittanceContext* _transmittance)
@@ -101,14 +104,7 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	});
 	ERROR_IF(failed(result), std::fmt("Skyview LUT Pipeline creation failed with %s", to_cstr(result)));
 
-	tie(result, framebuffer) = device->device.createFramebuffer({
-		.renderPass = renderpass.renderpass,
-		.attachmentCount = 1,
-		.pAttachments = &lut_view.image_view,
-		.width = lut.extent.width,
-		.height = lut.extent.height,
-		.layers = 1,
-	});
+	tie(result, framebuffer) = Framebuffer::create("Skyview LUT FB", &renderpass, { lut_view }, 1);
 	ERROR_IF(failed(result), std::fmt("Skyview LUT Framebuffer creation failed with %s", to_cstr(result)));
 
 	std::vector<vk::DescriptorPoolSize> pool_sizes = {
@@ -167,7 +163,7 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 		};
 
 		vk::DescriptorImageInfo image_info = {
-			.sampler = transmittance->lut_sampler,
+			.sampler = transmittance->lut_sampler.sampler,
 			.imageView = transmittance->lut_view.image_view,
 			.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
 		};
@@ -227,7 +223,7 @@ void SkyViewContext::recalculate(vk::CommandBuffer _cmd) {
 	vk::ClearValue clear_val(std::array{ 0.0f, 1.0f, 0.0f, 1.0f });
 	_cmd.beginRenderPass({
 		.renderPass = renderpass.renderpass,
-		.framebuffer = framebuffer,
+		.framebuffer = framebuffer.framebuffer,
 		.renderArea = {
 			.offset = { 0, 0 },
 			.extent = { lut.extent.width, lut.extent.height },
@@ -251,7 +247,7 @@ SkyViewContext::~SkyViewContext() {
 
 	ubo.destroy();
 
-	device->device.destroyFramebuffer(framebuffer);
+	framebuffer.destroy();
 	pipeline->destroy();
 	renderpass.destroy();
 

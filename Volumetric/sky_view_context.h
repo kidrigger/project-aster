@@ -16,6 +16,8 @@
 
 #include <util/buffer_writer.h>
 
+#include "core/framebuffer.h"
+
 struct SkyViewContext {
 	static constexpr vk::Extent3D sky_view_lut_extent = { 192, 108, 1 };
 
@@ -34,7 +36,7 @@ struct SkyViewContext {
 	// Fields
 	Pipeline* pipeline{};
 	RenderPass renderpass;
-	vk::Framebuffer framebuffer;
+	Framebuffer framebuffer;
 	vk::DescriptorPool descriptor_pool;
 	vk::DescriptorSet descriptor_set;
 	Buffer ubo;

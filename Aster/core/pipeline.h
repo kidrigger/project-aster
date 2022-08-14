@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: pipeline.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -130,7 +130,7 @@ namespace std {
 	template <>
 	struct hash<DescriptorInfo> {
 		[[nodiscard]]
-		usize operator()(const DescriptorInfo& _val) noexcept;
+		usize operator()(const DescriptorInfo& _val) const noexcept;
 	};
 }
 
@@ -147,7 +147,7 @@ namespace std {
 	template <>
 	struct hash<ShaderInfo> {
 		[[nodiscard]]
-		usize operator()(const ShaderInfo& _val) noexcept;
+		usize operator()(const ShaderInfo& _val) const noexcept;
 	};
 }
 
@@ -209,7 +209,7 @@ struct PipelineCreateInfo {
 	std::vector<std::string_view> shader_files;
 
 	struct {
-		std::vector<vk::PipelineColorBlendAttachmentState> attachments {
+		std::vector<vk::PipelineColorBlendAttachmentState> attachments{
 			{
 				.blendEnable = false,
 				.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA,
@@ -227,7 +227,7 @@ struct PipelineCreateInfo {
 template <>
 struct std::hash<PipelineCreateInfo> {
 	[[nodiscard]]
-	usize operator()(const PipelineCreateInfo& _value) noexcept;
+	usize operator()(const PipelineCreateInfo& _value) const noexcept;
 };
 
 struct Layout {
@@ -271,7 +271,7 @@ private:
 	vk::ResultValue<std::vector<Shader*>> create_shaders(const std::vector<std::string_view>& _names);
 	void destroy_shader_module(Shader* _shader) noexcept;
 
-	vk::ResultValue<std::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info);
+	vk::ResultValue<std::vector<vk::DescriptorSetLayout>> create_descriptor_layouts(const ShaderInfo& _shader_info) const;
 	vk::ResultValue<Layout*> create_pipeline_layout(const std::vector<Shader*>& _shaders);
 	void destroy_pipeline_layout(Layout* _layout) noexcept;
 

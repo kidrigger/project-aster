@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: swapchain.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include "swapchain.h"
@@ -34,7 +34,7 @@ Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _de
 		}
 	}
 
-	if (support.capabilities.currentExtent.width != max_value<u32>) {
+	if (support.capabilities.currentExtent.width != MAX_VALUE<u32>) {
 		extent = support.capabilities.currentExtent;
 	} else {
 		extent.width = std::clamp(_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
@@ -70,35 +70,27 @@ Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _de
 
 	_device->set_object_name(swapchain, name);
 
-	tie(result, images) = _device->device.getSwapchainImagesKHR(swapchain);
+	std::vector<vk::Image> temp_images;
+	tie(result, temp_images) = _device->device.getSwapchainImagesKHR(swapchain);
 	ERROR_IF(failed(result), std::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
 
 	u32 i_ = 0;
-	for (auto& image_ : images) {
-		_device->set_object_name(image_, std::fmt("%s Image %u", name.data(), i_++));
+	for (auto& img : temp_images) {
+		auto name_ = std::fmt("%s Image %u", name.data(), i_++);
+		images.emplace_back(_device, img, nullptr, vk::ImageUsageFlagBits::eColorAttachment, vma::MemoryUsage::eGpuOnly, 0, name_, vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
+		parent_device->set_object_name(images.back().image, name_);
 	}
 
 	i_ = 0;
 	for (auto& image : images) {
-		tie(result, image_views.emplace_back()) = parent_device->device.createImageView({
-			.image = image,
-			.viewType = vk::ImageViewType::e2D,
-			.format = format,
-			.components = {}, // All Identity
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1,
-			},
+		tie(result, image_views.emplace_back()) = ImageView::create(&image, vk::ImageViewType::e2D, {
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
 		});
 		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
-	}
-
-	i_ = 0;
-	for (auto& image_ : images) {
-		_device->set_object_name(image_, std::fmt("%s View %u", name.data(), i_++));
 	}
 
 	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
@@ -146,7 +138,7 @@ void Swapchain::recreate() {
 		}
 	}
 
-	if (support.capabilities.currentExtent.width != max_value<u32>) {
+	if (support.capabilities.currentExtent.width != MAX_VALUE<u32>) {
 		extent = support.capabilities.currentExtent;
 	} else {
 		extent.width = std::clamp(parent_window->extent.width, support.capabilities.minImageExtent.width, support.capabilities.maxImageExtent.width);
@@ -182,43 +174,34 @@ void Swapchain::recreate() {
 
 	parent_device->set_object_name(swapchain, name);
 
-	tie(result, images) = parent_device->device.getSwapchainImagesKHR(swapchain);
+	std::vector<vk::Image> temp_images;
+	tie(result, temp_images) = parent_device->device.getSwapchainImagesKHR(swapchain);
 	ERROR_IF(failed(result), std::fmt("Could not fetch images with %s", to_cstr(result))) THEN_CRASH(result);
 
 	u32 i_ = 0;
-	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, std::fmt("%s Image %u", name.data(), i_++));
+	images.clear();
+	for (auto& img : temp_images) {
+		images.emplace_back(parent_device, img, nullptr, vk::ImageUsageFlagBits::eColorAttachment, vma::MemoryUsage::eGpuOnly, 0, std::fmt("Swapchain image %d", i_++), vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
 	}
 
 	// TODO: See if this needs to be / can be async
 	result = parent_device->device.waitIdle();
 	ERROR_IF(failed(result), std::fmt("Device idling on %s failed with %s", parent_device->name.data(), to_cstr(result))) THEN_CRASH(result);
 	for (auto& image_view : image_views) {
-		parent_device->device.destroyImageView(image_view);
+		image_view.destroy();
 	}
 	image_views.clear();
 
 	i_ = 0;
 	for (auto& image : images) {
-		tie(result, image_views.emplace_back()) = parent_device->device.createImageView({
-			.image = image,
-			.viewType = vk::ImageViewType::e2D,
-			.format = format,
-			.components = {}, // All Identity
-			.subresourceRange = {
-				.aspectMask = vk::ImageAspectFlagBits::eColor,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1,
-			},
+		tie(result, image_views.emplace_back()) = ImageView::create(&image, vk::ImageViewType::e2D, {
+			.aspectMask = vk::ImageAspectFlagBits::eColor,
+			.baseMipLevel = 0,
+			.levelCount = 1,
+			.baseArrayLayer = 0,
+			.layerCount = 1,
 		});
 		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
-	}
-
-	i_ = 0;
-	for (auto& image_ : images) {
-		parent_device->set_object_name(image_, std::fmt("%s View %u", name.data(), i_++));
 	}
 
 	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
@@ -244,11 +227,14 @@ Swapchain& Swapchain::operator=(Swapchain&& _other) noexcept {
 
 Swapchain::~Swapchain() {
 	for (auto& image_view : image_views) {
-		parent_device->device.destroyImageView(image_view);
+		image_view.destroy();
 	}
+	image_views.clear();
 
 	if (swapchain) {
 		parent_device->device.destroySwapchainKHR(swapchain);
+		parent_device = nullptr;
+		swapchain = nullptr;
 	}
 	INFO(std::fmt("Swapchain '%s' destroyed", name.data()));
 }

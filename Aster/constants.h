@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: constants.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -33,15 +33,15 @@ constexpr usize strlen_c(const char* s) {
 	return *s == '\0' ? 0 : 1 + strlen_c(s + 1);
 }
 
-constexpr auto ANSI_Black = "\u001b[30m";
-constexpr auto ANSI_Red = "\u001b[31m";
-constexpr auto ANSI_Green = "\u001b[32m";
-constexpr auto ANSI_Yellow = "\u001b[33m";
-constexpr auto ANSI_Blue = "\u001b[34m";
-constexpr auto ANSI_Magenta = "\u001b[35m";
-constexpr auto ANSI_Cyan = "\u001b[36m";
-constexpr auto ANSI_White = "\u001b[37m";
-constexpr auto ANSI_Reset = "\u001b[0m";
+constexpr auto ANSI_BLACK = "\u001b[30m";
+constexpr auto ANSI_RED = "\u001b[31m";
+constexpr auto ANSI_GREEN = "\u001b[32m";
+constexpr auto ANSI_YELLOW = "\u001b[33m";
+constexpr auto ANSI_BLUE = "\u001b[34m";
+constexpr auto ANSI_MAGENTA = "\u001b[35m";
+constexpr auto ANSI_CYAN = "\u001b[36m";
+constexpr auto ANSI_WHITE = "\u001b[37m";
+constexpr auto ANSI_RESET = "\u001b[0m";
 
 using std::move;
 using std::forward;
@@ -60,12 +60,12 @@ constexpr auto recast(from_t&& _in) {
 	return reinterpret_cast<type_t>(forward<from_t>(_in));
 }
 
-constexpr f32 operator ""_deg(f128 degrees) {
-	return glm::radians<f32>(cast<f32>(degrees));
+constexpr f32 operator ""_deg(f128 _degrees) {
+	return glm::radians<f32>(cast<f32>(_degrees));
 }
 
-constexpr f32 operator ""_deg(u64 degrees) {
-	return glm::radians<f32>(cast<f32>(degrees));
+constexpr f32 operator ""_deg(u64 _degrees) {
+	return glm::radians<f32>(cast<f32>(_degrees));
 }
 
 using glm::ivec2;
@@ -93,31 +93,31 @@ constexpr Version VERSION = {
 	.patch = 1,
 };
 
-enum class Error {
+enum class ErrorCode {
 	eUnknown = 1000,
 	eNoDevices = 1001,
 };
 
 template <typename T>
-constexpr T max_value = std::numeric_limits<T>::max();
+constexpr T MAX_VALUE = std::numeric_limits<T>::max();
 
 template <typename T>
-constexpr T min_value = std::numeric_limits<T>::min();
+constexpr T MIN_VALUE = std::numeric_limits<T>::min();
 
 template <typename T>
-constexpr T lowest_value = std::numeric_limits<T>::lowest();
+constexpr T LOWEST_VALUE = std::numeric_limits<T>::lowest();
 
 template <typename T>
-constexpr T err_epsilon = std::numeric_limits<T>::epsilon();
+constexpr T ERR_EPSILON = std::numeric_limits<T>::epsilon();
 
 template <typename T>
-constexpr T positive_inf = std::numeric_limits<T>::infinity();
+constexpr T POSITIVE_INF = std::numeric_limits<T>::infinity();
 
 template <typename T>
-constexpr T negative_inf = -std::numeric_limits<T>::infinity();
+constexpr T NEGATIVE_INF = -std::numeric_limits<T>::infinity();
 
 template <typename T>
-constexpr T qnan = std::numeric_limits<T>::quiet_NaN();
+constexpr T Q_NAN = std::numeric_limits<T>::quiet_NaN();
 
 template <typename T>
-constexpr T snan = std::numeric_limits<T>::signalling_NaN();
+constexpr T S_NAN = std::numeric_limits<T>::signalling_NaN();

@@ -1,6 +1,6 @@
 // =============================================
 //  Aster: swapchain.h
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #pragma once
@@ -10,6 +10,9 @@
 #include <core/window.h>
 
 #include <vector>
+
+#include <core/image.h>
+#include <core/image_view.h>
 
 struct SurfaceSupportDetails {
 	vk::SurfaceCapabilitiesKHR capabilities;
@@ -43,8 +46,8 @@ struct Swapchain {
 	bool requires_ownership_transfer;
 	std::string name;
 
-	std::vector<vk::Image> images;
-	std::vector<vk::ImageView> image_views;
+	std::vector<Image> images;
+	std::vector<ImageView> image_views;
 	u32 image_count{ 0 };
 
 	Swapchain(const std::string_view& _name, Window* _window, Device* _device);

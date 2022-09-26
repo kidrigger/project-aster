@@ -34,7 +34,7 @@ i32 aster_main() {
 
 	g_logger.set_minimum_logging_level(Logger::LogType::eDebug);
 	GlfwContext glfw{};
-	Context context{ "Aster Core", { 0, 0, 1 } };
+	Context context{ "Volumetric Core", { 0, 0, 1 } };
 	Window window{ PROJECT_NAME, &context, { 1280u, 720u } };
 
 	vk::PhysicalDeviceFeatures enabled_device_features = {
@@ -139,27 +139,26 @@ i32 aster_main() {
 	};
 
 	// Render pass
-	tie(result, render_pass) = RenderPass::create("Triangle Draw Pass", &device, {
+	render_pass = RenderPass::create("Triangle Draw Pass", &device, {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency,
-	});
-	ERROR_IF(failed(result), std::fmt("Renderpass creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Renderpass Created");
+		}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
+	INFO(std::fmt("Renderpass %s Created", render_pass.name.c_str()));
 
 	auto recreate_framebuffers = std::function{
 		[&render_pass, &device, &framebuffers, &swapchain]() {
-			vk::Result result_;
 			for (auto& fb : framebuffers) {
 				fb.destroy();
 			}
 			framebuffers.resize(swapchain.image_count);
 
 			for (u32 i = 0; i < swapchain.image_count; ++i) {
-				tie(result_, framebuffers[i]) = Framebuffer::create("Present Framebuffer", &render_pass, { swapchain.image_views[i] }, 1);
-				ERROR_IF(failed(result_), std::fmt("Framebuffer creation failed with %s", to_cstr(result_))) THEN_CRASH(result_) ELSE_INFO("Framebuffer Created");
+				framebuffers[i] = Framebuffer::create("Present Framebuffer", &render_pass, { swapchain.image_views[i] }, 1)
+					.expect(std::fmt("Framebuffer creation failed with %s", to_cstr(err)));
 			}
 		}
 	};
@@ -302,7 +301,8 @@ i32 aster_main() {
 	std::vector<Buffer> uniform_buffers;
 	const auto ubo_alignment = device.physical_device_properties.limits.minUniformBufferOffsetAlignment;
 	for (u32 i = 0; i < swapchain.image_count; ++i) {
-		tie(result, uniform_buffers.emplace_back()) = Buffer::create(std::fmt("Camera Ubo %i", i), &device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
+		uniform_buffers.emplace_back() = Buffer::create(std::fmt("Camera Ubo %i", i), &device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu)
+			.expect("Camera UBO creation failed!");
 		{
 			BufferWriter{&uniform_buffers.back()} << camera << sun << atmosphere_info;
 

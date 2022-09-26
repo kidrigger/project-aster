@@ -92,7 +92,7 @@ public:
 		WARN_IF(failed(result), "Debug Utils name setting failed with "s + to_string(result));
 	}
 
-	[[nodiscard]] vk::ResultValue<vk::CommandBuffer> alloc_temp_command_buffer(vk::CommandPool _pool) const {
+	[[nodiscard]] Result<vk::CommandBuffer, vk::Result> alloc_temp_command_buffer(vk::CommandPool _pool) const {
 		vk::CommandBuffer cmd;
 		vk::CommandBufferAllocateInfo cmd_buf_alloc_info = {
 			.commandPool = _pool,
@@ -100,7 +100,10 @@ public:
 			.commandBufferCount = 1,
 		};
 		const auto result = device.allocateCommandBuffers(&cmd_buf_alloc_info, &cmd);
-		return vk::ResultValue<vk::CommandBuffer>(result, cmd);
+		if (failed(result)) {
+			return make_error(result);
+		}
+		return std::move(cmd);
 	}
 
 	[[nodiscard]] SubmitTask<Buffer> upload_data(Buffer* _host_buffer, const std::span<u8>& _data);

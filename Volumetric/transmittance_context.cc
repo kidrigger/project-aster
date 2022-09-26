@@ -18,23 +18,21 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 	auto* device = _pipeline_factory->parent_device;
 	const auto ubo_alignment = device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
 
-	tie(result, lut) = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
-	ERROR_IF(failed(result), std::fmt("LUT Image could not be created with %s", to_cstr(result)));
+	lut = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)
+	.expect(std::fmt("LUT Image could not be created with %s", to_cstr(err)));
 
-	tie(result, lut_view) = ImageView::create(&lut, vk::ImageViewType::e2D, {
+	lut_view = ImageView::create(&lut, vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.levelCount = 1,
 		.layerCount = 1,
-	});
-	ERROR_IF(failed(result), "LUT Image View could not be created");
+	}).expect("LUT Image View could not be created");
 
-	tie(result, lut_sampler) = Sampler::create("LUT Image Sampler", device, {
+	lut_sampler = Sampler::create("LUT Image Sampler", device, {
 		.magFilter = vk::Filter::eLinear,
 		.minFilter = vk::Filter::eLinear,
 		.addressModeU = vk::SamplerAddressMode::eClampToEdge,
 		.addressModeV = vk::SamplerAddressMode::eClampToEdge,
-	});
-	ERROR_IF(failed(result), "LUT Image Sampler could not be created");
+	}).expect("LUT Image Sampler could not be created");
 
 	vk::AttachmentDescription attach_desc = {
 		.format = lut.format,
@@ -67,19 +65,19 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 	};
 
 	// Renderpass
-	tie(result, renderpass) = RenderPass::create("Transmittance LUT pass", _pipeline_factory->parent_device, {
+	renderpass = RenderPass::create("Transmittance LUT pass", _pipeline_factory->parent_device, {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency
-	});
-	ERROR_IF(failed(result), std::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result))) THEN_CRASH(result) ELSE_INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
+		}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
+	INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
 
 	// Framebuffer
-	tie(result, framebuffer) = Framebuffer::create("LUT Framebuffer", &renderpass, { lut_view }, 1);
-	ERROR_IF(failed(result), std::fmt("LUT Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Framebuffer created");
+	framebuffer = Framebuffer::create("LUT Framebuffer", &renderpass, { lut_view }, 1)
+		.expect(std::fmt("LUT Framebuffer creation failed with %s", to_cstr(err)));
 
 	tie(result, pipeline) = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
@@ -118,9 +116,9 @@ void TransmittanceContext::recalculate(PipelineFactory* _pipeline_factory, const
 
 	rdoc::start_capture();
 	auto* device = _pipeline_factory->parent_device;
-	auto [result, cmd] = device->alloc_temp_command_buffer(device->graphics_cmd_pool);
+	const auto cmd = device->alloc_temp_command_buffer(device->graphics_cmd_pool).expect("Temp buffer creation failed!");
 
-	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
+	auto result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });
 	ERROR_IF(failed(result), std::fmt("Command buffer begin failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Cmd Created");
 
 	cmd.beginDebugUtilsLabelEXT({

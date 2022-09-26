@@ -6,12 +6,14 @@
 #include "sampler.h"
 #include <core/device.h>
 
-vk::ResultValue<Sampler> Sampler::create(const std::string_view& _name, Device* _device, const vk::SamplerCreateInfo& _create_info) {
+Result<Sampler, vk::Result> Sampler::create(const std::string_view& _name, Device* _device, const vk::SamplerCreateInfo& _create_info) {
 	auto [result, sampler] = _device->device.createSampler(_create_info);
-	if (!failed(result)) {
-		_device->set_object_name(sampler, _name);
+	if (failed(result)) {
+		return make_error(result);
 	}
-	return vk::ResultValue<Sampler>(result, Sampler{
+	
+	_device->set_object_name(sampler, _name);
+	return Sampler{
 		.parent_device = _device,
 		.sampler = sampler,
 		.filter = { _create_info.minFilter, _create_info.magFilter },
@@ -25,8 +27,8 @@ vk::ResultValue<Sampler> Sampler::create(const std::string_view& _name, Device* 
 		.lod = { .min = _create_info.minLod, .max = _create_info.maxLod },
 		.border_color = _create_info.borderColor,
 		.unnormalized_coordinates = cast<b8>(_create_info.unnormalizedCoordinates),
-		.name = std::string{ _name },
-	});
+		.name = name_t::from( _name ),
+	};
 }
 
 void Sampler::destroy() {

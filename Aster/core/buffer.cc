@@ -6,7 +6,7 @@
 #include <core/buffer.h>
 #include <core/device.h>
 
-vk::ResultValue<Buffer> Buffer::create(const std::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
+Result<Buffer, vk::Result> Buffer::create(const std::string& _name, Device* _device, usize _size, vk::BufferUsageFlags _usage, vma::MemoryUsage _memory_usage) {
 	auto [result, buffer] = _device->allocator.createBuffer({
 		.size = _size,
 		.usage = _usage,
@@ -15,19 +15,21 @@ vk::ResultValue<Buffer> Buffer::create(const std::string& _name, Device* _device
 		.usage = _memory_usage,
 	});
 
-	if (!failed(result)) {
-		_device->set_object_name(buffer.first, _name);
+	if (failed(result)) {
+		return make_error(result);
 	}
+	
+	_device->set_object_name(buffer.first, _name);
 
-	return vk::ResultValue<Buffer>(result, {
+	return Buffer{
 		.parent_device = _device,
 		.buffer = buffer.first,
 		.allocation = buffer.second,
 		.usage = _usage,
 		.memory_usage = _memory_usage,
 		.size = _size,
-		.name = _name,
-	});
+		.name = name_t::from(_name),
+	};
 }
 
 void Buffer::destroy() {

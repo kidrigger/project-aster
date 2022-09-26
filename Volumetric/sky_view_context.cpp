@@ -17,22 +17,21 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	auto* const device = _pipeline_factory->parent_device;
 	const auto ubo_alignment = device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
 
-	tie(result, ubo) = Buffer::create("Sky View uniform buffer", device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu);
-	ERROR_IF(failed(result), std::fmt("Skyview UBO creation failed with %s", to_cstr(result)));
+	ubo = Buffer::create("Sky View uniform buffer", device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu)
+		.expect(std::fmt("Skyview UBO creation failed with %s", to_cstr(err)));
 
 	ubo_writer = BufferWriter{ &ubo };
 
 	transmittance = _transmittance;
 
-	tie(result, lut) = Image::create("Sky View LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, sky_view_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled);
-	ERROR_IF(failed(result), std::fmt("Skyview LUT creation failed with %s", to_cstr(result)));
+	lut = Image::create("Sky View LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, sky_view_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)
+		.expect(std::fmt("Skyview LUT creation failed with %s", to_cstr(err)));
 
-	tie(result, lut_view) = ImageView::create(&lut, vk::ImageViewType::e2D, {
+	lut_view = ImageView::create(&lut, vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
 		.levelCount = 1,
 		.layerCount = 1,
-	});
-	ERROR_IF(failed(result), std::fmt("Skyview LUT view creation failed with %s", to_cstr(result)));
+	}).expect(std::fmt("Skyview LUT view creation failed with %s", to_cstr(err)));
 
 	vk::AttachmentDescription attach_desc = {
 		.format = lut.format,
@@ -65,15 +64,14 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	};
 
 	// Renderpass
-	tie(result, renderpass) = RenderPass::create("Skyview LUT pass", _pipeline_factory->parent_device, {
+	renderpass = RenderPass::create("Skyview LUT pass", _pipeline_factory->parent_device, {
 		.attachmentCount = 1,
 		.pAttachments = &attach_desc,
 		.subpassCount = 1,
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency,
-	});
-	ERROR_IF(failed(result), std::fmt("Renderpass %s creation failed with %s", renderpass.name.c_str(), to_cstr(result)));
+	}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
 
 	tie(result, pipeline) = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
@@ -104,8 +102,8 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	});
 	ERROR_IF(failed(result), std::fmt("Skyview LUT Pipeline creation failed with %s", to_cstr(result)));
 
-	tie(result, framebuffer) = Framebuffer::create("Skyview LUT FB", &renderpass, { lut_view }, 1);
-	ERROR_IF(failed(result), std::fmt("Skyview LUT Framebuffer creation failed with %s", to_cstr(result)));
+	framebuffer = Framebuffer::create("Skyview LUT FB", &renderpass, { lut_view }, 1)
+		.expect(std::fmt("Skyview LUT Framebuffer creation failed with %s", to_cstr(err)));
 
 	std::vector<vk::DescriptorPoolSize> pool_sizes = {
 		{

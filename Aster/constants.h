@@ -10,6 +10,7 @@
 #include <optional>
 #include <tuple>
 
+#include <tl/expected.hpp>
 #include <glm/glm.hpp>
 
 using c8 = char;
@@ -29,8 +30,36 @@ using b32 = u32;
 using usize = size_t;
 using p64 = intptr_t;
 
-constexpr usize strlen_c(const char* s) {
-	return *s == '\0' ? 0 : 1 + strlen_c(s + 1);
+template <typename Ok, typename Err>
+using Result = tl::expected<Ok, Err>;
+
+template <typename Err>
+using Error = tl::unexpected<Err>;
+
+template <typename Err>
+Error<Err> make_error(Err _err) {
+	#if !defined(NDEBUG)
+		__debugbreak();
+	#endif // !defined(NDEBUG)
+	return Error<Err>(_err);
+}
+
+#define expect(msg) map_error([](auto& err) -> void { ERROR((msg)) THEN_CRASH(err); }).value()
+
+constexpr u64 clog2(const u64 _in) {
+	if (_in == 1) {
+		return 0;
+	}
+	return 1 + clog2(_in >> 1);
+}
+
+constexpr auto HANDLE_SIZE = 32;
+constexpr usize MAX_SLOTS = 4096;
+constexpr auto DEFAULT_INDEX_BITS = clog2(MAX_SLOTS);
+constexpr auto DEFAULT_HANDLE_GEN = HANDLE_SIZE-DEFAULT_INDEX_BITS;
+
+constexpr usize strlen_c(const char* _s) {
+	return *_s == '\0' ? 0 : 1 + strlen_c(_s + 1);
 }
 
 constexpr auto ANSI_BLACK = "\u001b[30m";

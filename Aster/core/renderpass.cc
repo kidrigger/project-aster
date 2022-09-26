@@ -7,7 +7,7 @@
 
 #include "renderpass.h"
 
-vk::ResultValue<RenderPass> RenderPass::create(const std::string& _name, Device* _device, const vk::RenderPassCreateInfo& _create_info) {
+Result<RenderPass, vk::Result> RenderPass::create(const std::string& _name, Device* _device, const vk::RenderPassCreateInfo& _create_info) {
 	ERROR_IF(_create_info.subpassCount != 1, std::fmt("Renderpass %s has more than 1 subpass. Currently unsupported"));
 
 	const auto attachments = std::span(_create_info.pAttachments, cast<usize>(_create_info.attachmentCount));
@@ -38,17 +38,18 @@ vk::ResultValue<RenderPass> RenderPass::create(const std::string& _name, Device*
 	}
 
 	auto [result, rp] = _device->device.createRenderPass(_create_info);
-	if (!failed(result)) {
-		auto renderpass = RenderPass{
-			.renderpass = rp,
-			.name = _name,
-			.attachment_format = hash_value,
-			.parent_device = _device,
-		};
-		_device->set_object_name(renderpass.renderpass, _name);
-		return { result, renderpass };
+	if (failed(result)) {
+		return make_error(result);
 	}
-	return { result, {} };
+	_device->set_object_name(rp, _name);
+	
+	auto renderpass = RenderPass{
+		.renderpass = rp,
+		.name = name_t::from(_name),
+		.attachment_format = hash_value,
+		.parent_device = _device,
+	};
+	return renderpass;
 }
 
 void RenderPass::destroy() {

@@ -77,20 +77,20 @@ Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _de
 	u32 i_ = 0;
 	for (auto& img : temp_images) {
 		auto name_ = std::fmt("%s Image %u", name.data(), i_++);
-		images.emplace_back(_device, img, nullptr, vk::ImageUsageFlagBits::eColorAttachment, vma::MemoryUsage::eGpuOnly, 0, name_, vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
+		images.emplace_back(_device, img, nullptr, vk::ImageUsageFlagBits::eColorAttachment, vma::MemoryUsage::eGpuOnly, 0, name_t::from(name_), vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
 		parent_device->set_object_name(images.back().image, name_);
 	}
 
 	i_ = 0;
 	for (auto& image : images) {
-		tie(result, image_views.emplace_back()) = ImageView::create(&image, vk::ImageViewType::e2D, {
+		image_views.emplace_back() = ImageView::create(&image, vk::ImageViewType::e2D, {
 			.aspectMask = vk::ImageAspectFlagBits::eColor,
 			.baseMipLevel = 0,
 			.levelCount = 1,
 			.baseArrayLayer = 0,
 			.layerCount = 1,
-		});
-		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
+			}).expect(std::fmt("Image View Creation failed with %s", to_cstr(err)));
+		VERBOSE(std::fmt("Image view %u created", i_++));
 	}
 
 	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));
@@ -181,7 +181,7 @@ void Swapchain::recreate() {
 	u32 i_ = 0;
 	images.clear();
 	for (auto& img : temp_images) {
-		images.emplace_back(parent_device, img, nullptr, vk::ImageUsageFlagBits::eColorAttachment, vma::MemoryUsage::eGpuOnly, 0, std::fmt("Swapchain image %d", i_++), vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
+		images.emplace_back(parent_device, img, nullptr, vk::ImageUsageFlagBits::eColorAttachment, vma::MemoryUsage::eGpuOnly, 0, name_t::from(std::fmt("Swapchain image %d", i_++)), vk::ImageType::e2D, format, vk::Extent3D{ extent.width, extent.height, 1 }, 1, 1);
 	}
 
 	// TODO: See if this needs to be / can be async
@@ -194,14 +194,14 @@ void Swapchain::recreate() {
 
 	i_ = 0;
 	for (auto& image : images) {
-		tie(result, image_views.emplace_back()) = ImageView::create(&image, vk::ImageViewType::e2D, {
+		image_views.emplace_back() = ImageView::create(&image, vk::ImageViewType::e2D, {
 			.aspectMask = vk::ImageAspectFlagBits::eColor,
 			.baseMipLevel = 0,
 			.levelCount = 1,
 			.baseArrayLayer = 0,
 			.layerCount = 1,
-		});
-		ERROR_IF(failed(result), std::fmt("Image View Creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE(std::fmt("Image view %u created", i_++));
+			}).expect(std::fmt("Image View Creation failed with %s", to_cstr(err)));
+		VERBOSE(std::fmt("Image view %u created", i_++));
 	}
 
 	INFO(std::fmt("Number of swapchain images in %s %d", name.data(), image_count));

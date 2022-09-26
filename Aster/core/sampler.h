@@ -39,9 +39,9 @@ struct Sampler {
 
 	vk::BorderColor border_color{ vk::BorderColor::eFloatTransparentBlack };
 	b8 unnormalized_coordinates = {};
-	std::string name;
+	name_t name;
 
-	static vk::ResultValue<Sampler> create(const std::string_view& _name, Device* _device, const vk::SamplerCreateInfo& _create_info);
+	static Result<Sampler, vk::Result> create(const std::string_view& _name, Device* _device, const vk::SamplerCreateInfo& _create_info);
 
 	void destroy();
 };

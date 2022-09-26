@@ -102,8 +102,35 @@ struct Time {
 };
 
 [[nodiscard]]
-inline usize closest_multiple(usize _val, usize _of) {
+constexpr usize closest_multiple(usize _val, usize _of) {
 	return _of * ((_val + _of - 1) / _of);
 }
+
+constexpr usize MAX_NAME_LENGTH = 31;
+struct name_t {
+	constexpr static usize SIZE = MAX_NAME_LENGTH + 1;
+	constexpr static char END_CHAR = '\0';
+
+	c8 data[SIZE];
+
+	void write(const std::string_view _str) {
+		strcpy_s(data, SIZE, _str.data());
+	}
+
+	static name_t from(const std::string_view& _str) {
+		name_t n;
+		n.write(_str);
+		return n;
+	}
+
+	name_t& operator=(const std::string_view& _str) {
+		write(_str);
+		return *this;
+	}
+
+	[[nodiscard]] const c8* c_str() const { return data; }
+};
+
+static_assert(std::is_trivially_copyable_v<name_t>);
 
 extern Time g_time;

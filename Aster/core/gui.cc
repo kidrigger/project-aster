@@ -88,15 +88,15 @@ namespace ImGui {
 		};
 
 		// Renderpass
-		tie(result, renderpass) = RenderPass::create("UI pass", device_, {
+		renderpass = RenderPass::create("UI pass", device_, {
 			.attachmentCount = 1,
 			.pAttachments = &attach_desc,
 			.subpassCount = 1,
 			.pSubpasses = &subpass,
 			.dependencyCount = 1,
 			.pDependencies = &dependency
-		});
-		ERROR_IF(failed(result), std::fmt("Renderpass creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("UI pass Created");
+			}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
+		INFO("UI pass Created");
 
 		IMGUI_CHECKVERSION();
 		CreateContext();
@@ -124,8 +124,7 @@ namespace ImGui {
 		};
 		ImGui_ImplVulkan_Init(&init_info, renderpass.renderpass);
 
-		vk::CommandBuffer cmd;
-		tie(result, cmd) = device_->alloc_temp_command_buffer(device_->transfer_cmd_pool);
+		const auto cmd = device_->alloc_temp_command_buffer(device_->transfer_cmd_pool).expect("Temp command buffer creation failed");
 		result = cmd.begin(vk::CommandBufferBeginInfo{ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit });
 
 		ImGui_ImplVulkan_CreateFontsTexture(cmd);
@@ -139,15 +138,8 @@ namespace ImGui {
 
 		framebuffers.reserve(_swapchain->image_count);
 		for (auto& iv : _swapchain->image_views) {
-			tie(result, framebuffers.emplace_back()) = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1); /*device_->device.createFramebuffer({
-				.renderPass = renderpass,
-				.attachmentCount = 1,
-				.pAttachments = &iv,
-				.width = _swapchain->extent.width,
-				.height = _swapchain->extent.height,
-				.layers = 1,
-			});*/
-			ERROR_IF(failed(result), std::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			framebuffers.emplace_back() = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1)
+				.expect(std::fmt("GUI Framebuffer creation failed with %s", to_cstr(err)));
 		}
 
 		result = task.wait_and_destroy();
@@ -168,15 +160,14 @@ namespace ImGui {
 	}
 
 	void Recreate() {
-		vk::Result result;
 		for (auto& fb : framebuffers) {
 			fb.destroy();
 		}
 		framebuffers.clear();
 		framebuffers.reserve(current_swapchain->image_count);
 		for (auto& iv : current_swapchain->image_views) {
-			tie(result, framebuffers.emplace_back()) = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1);
-			ERROR_IF(failed(result), std::fmt("GUI Framebuffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+			framebuffers.emplace_back() = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1)
+				.expect(std::fmt("GUI Framebuffer creation failed with %s", to_cstr(err)));
 		}
 	}
 

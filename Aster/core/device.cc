@@ -133,11 +133,11 @@ Device::~Device() {
 }
 
 SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>& _data) {
-	ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), std::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.data()))
-	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, std::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.data()));
+	ERROR_IF(!(_host_buffer->usage & vk::BufferUsageFlagBits::eTransferDst), std::fmt("Buffer %s is not a transfer dst. Use vk::BufferUsageFlagBits::eTransferDst during creation", _host_buffer->name.c_str()))
+	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, std::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.c_str()));
 
-	auto [result, staging_buffer] = Buffer::create("_stage " + _host_buffer->name, this, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly);
-	ERROR_IF(failed(result), std::fmt("Staging buffer creation failed with %s", to_cstr(result))) THEN_CRASH(result);
+	auto staging_buffer = Buffer::create(std::fmt("_stage %s", _host_buffer->name.c_str()), this, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly)
+		.expect(std::fmt("Staging buffer creation failed with %s", to_cstr(err)));
 
 	update_data(&staging_buffer, _data);
 
@@ -148,8 +148,8 @@ SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>
 		.commandBufferCount = 1,
 	};
 
-	result = device.allocateCommandBuffers(&allocate_info, &cmd);
-	set_object_name(cmd, std::fmt("%s transfer command", _host_buffer->name.data()));
+	auto result = device.allocateCommandBuffers(&allocate_info, &cmd);
+	set_object_name(cmd, std::fmt("%s transfer command", _host_buffer->name.c_str()));
 	ERROR_IF(failed(result), std::fmt("Transfer command pool allocation failed with %s", to_cstr(result))) THEN_CRASH(result);
 
 	result = cmd.begin({ .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit, });

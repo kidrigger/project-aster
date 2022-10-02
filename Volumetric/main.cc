@@ -1,6 +1,6 @@
 // =============================================
 //  Volumetric: main.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include <stdafx.h>
@@ -17,6 +17,7 @@
 #include <core/gui.h>
 #include <core/image.h>
 #include <core/image_view.h>
+#include <core/resource_pool.h>
 
 #include <util/buffer_writer.h>
 
@@ -146,11 +147,11 @@ i32 aster_main() {
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency,
-		}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
+	}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
 	INFO(std::fmt("Renderpass %s Created", render_pass.name.c_str()));
 
 	auto recreate_framebuffers = std::function{
-		[&render_pass, &device, &framebuffers, &swapchain]() {
+		[&render_pass, &framebuffers, &swapchain]() {
 			for (auto& fb : framebuffers) {
 				fb.destroy();
 			}
@@ -158,14 +159,14 @@ i32 aster_main() {
 
 			for (u32 i = 0; i < swapchain.image_count; ++i) {
 				framebuffers[i] = Framebuffer::create("Present Framebuffer", &render_pass, { swapchain.image_views[i] }, 1)
-					.expect(std::fmt("Framebuffer creation failed with %s", to_cstr(err)));
+				                  .expect(std::fmt("Framebuffer creation failed with %s", to_cstr(err)));
 			}
 		}
 	};
 
 	recreate_framebuffers();
 
-	tie(result, pipeline) = pipeline_factory.create_pipeline({
+	pipeline = pipeline_factory.create_pipeline({
 		.renderpass = render_pass,
 		.viewport_state = {
 			.enable_dynamic = true,
@@ -173,39 +174,18 @@ i32 aster_main() {
 		.shader_files = { R"(res/shaders/hillaire.vs.spv)", R"(res/shaders/hillaire.fs.spv)" },
 		.dynamic_states = { vk::DynamicState::eViewport, vk::DynamicState::eScissor },
 		.name = "Main Pipeline"
-	});
-	ERROR_IF(failed(result), std::fmt("Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("Pipeline Created");
+	}).expect(std::fmt("Pipeline creation failed with %s", to_cstr(err)));
+	INFO("Pipeline Created");
 
-	std::vector<vk::DescriptorPoolSize> pool_sizes = {
-		{
-			.type = vk::DescriptorType::eUniformBuffer,
-			.descriptorCount = swapchain.image_count * 3,
-		},
-		{
-			.type = vk::DescriptorType::eCombinedImageSampler,
-			.descriptorCount = swapchain.image_count
-		},
-		{
-			.type = vk::DescriptorType::eSampledImage,
-			.descriptorCount = swapchain.image_count
-		}
-	};
+	ResourcePool resource_pool = ResourcePool::create(&device, pipeline->layout, swapchain.image_count)
+	                             .expect(std::fmt("Resource Binders creation failed with %s", to_cstr(err)));
+	INFO(std::fmt("Resource Binders for pipeline %s successfully created", pipeline->name.c_str()));
 
-	vk::DescriptorPool descriptor_pool;
-	tie(result, descriptor_pool) = device.device.createDescriptorPool({
-		.maxSets = swapchain.image_count,
-		.poolSizeCount = cast<u32>(pool_sizes.size()),
-		.pPoolSizes = pool_sizes.data(),
-	});
-
-	std::vector<vk::DescriptorSet> descriptor_sets;
-	{
-		std::vector<vk::DescriptorSetLayout> layouts(swapchain.image_count, pipeline->layout->descriptor_set_layouts.front());
-		tie(result, descriptor_sets) = device.device.allocateDescriptorSets({
-			.descriptorPool = descriptor_pool,
-			.descriptorSetCount = cast<u32>(layouts.size()),
-			.pSetLayouts = layouts.data(),
-		});
+	std::vector<ResourceSet> resource_sets;
+	resource_sets.reserve(swapchain.image_count);
+	for (u32 i = 0; i < swapchain.image_count; ++i) {
+		auto res = resource_pool.allocate_resource_set();
+		resource_sets.emplace_back(res.expect("Resource Set Alloc failed!"));
 	}
 
 	struct Frame {
@@ -251,7 +231,7 @@ i32 aster_main() {
 			_device->set_object_name(command_buffer, std::fmt("Frame %d Command Buffer", _frame_index));
 		}
 
-		void destroy() {
+		void destroy() const {
 			parent_device->device.destroySemaphore(image_available_sem);
 			parent_device->device.destroySemaphore(render_finished_sem);
 			parent_device->device.destroyFence(in_flight_fence);
@@ -302,75 +282,36 @@ i32 aster_main() {
 	const auto ubo_alignment = device.physical_device_properties.limits.minUniformBufferOffsetAlignment;
 	for (u32 i = 0; i < swapchain.image_count; ++i) {
 		uniform_buffers.emplace_back() = Buffer::create(std::fmt("Camera Ubo %i", i), &device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu)
-			.expect("Camera UBO creation failed!");
+		                                 .expect("Camera UBO creation failed!");
 		{
-			BufferWriter{&uniform_buffers.back()} << camera << sun << atmosphere_info;
+			BufferWriter{ &uniform_buffers.back() } << camera << sun << atmosphere_info;
 
-			std::vector<vk::DescriptorBufferInfo> buf_info = {
-				{
-					.buffer = uniform_buffers.back().buffer,
-					.offset = 0,
-					.range = sizeof(Camera),
-				},
-				{
-					.buffer = uniform_buffers.back().buffer,
-					.offset = closest_multiple(sizeof(Camera), ubo_alignment),
-					.range = sizeof(SunData),
-				},
-				{
-					.buffer = uniform_buffers.back().buffer,
-					.offset = closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment),
-					.range = sizeof(AtmosphereInfo),
-				}
-			};
-
-			vk::DescriptorImageInfo transmittance_image_info = {
+			auto buffer_ = uniform_buffers.back().buffer;
+			resource_sets[i].set_buffer("camera", {
+				.buffer = buffer_,
+				.offset = 0,
+				.range = sizeof(Camera)
+			});
+			resource_sets[i].set_buffer("sun", {
+				.buffer = buffer_,
+				.offset = closest_multiple(sizeof(Camera), ubo_alignment),
+				.range = sizeof(SunData)
+			});
+			resource_sets[i].set_buffer("atmos", {
+				.buffer = buffer_,
+				.offset = closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment),
+				.range = sizeof(AtmosphereInfo)
+			});
+			resource_sets[i].set_texture("transmittance_lut", {
 				.sampler = transmittance.lut_sampler.sampler,
 				.imageView = transmittance.lut_view.image_view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-			};
-
-			vk::DescriptorImageInfo sky_view_image_info = {
+			});
+			resource_sets[i].set_texture("skyview_lut", {
 				.imageView = sky_view.lut_view.image_view,
 				.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
-			};
-
-			device.device.updateDescriptorSets({ {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 0,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[0],
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 1,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[1],
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 2,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eUniformBuffer,
-				.pBufferInfo = &buf_info[2],
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 3,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eCombinedImageSampler,
-				.pImageInfo = &transmittance_image_info,
-			}, {
-				.dstSet = descriptor_sets[i],
-				.dstBinding = 4,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = vk::DescriptorType::eSampledImage,
-				.pImageInfo = &sky_view_image_info,
-			} }, {});
+			});
+			resource_sets[i].update();
 		}
 	}
 
@@ -525,7 +466,6 @@ i32 aster_main() {
 			.renderPass = render_pass.renderpass,
 			.framebuffer = framebuffers[image_idx].framebuffer,
 			.renderArea = {
-				.offset = { 0, 0 },
 				.extent = swapchain.extent,
 			},
 			.clearValueCount = 1,
@@ -534,11 +474,9 @@ i32 aster_main() {
 
 		cmd.setViewport(0, {
 			{
-				.x = 0,
 				.y = cast<f32>(swapchain.extent.height),
 				.width = cast<f32>(swapchain.extent.width),
 				.height = -cast<f32>(swapchain.extent.height),
-				.minDepth = 0.0f,
 				.maxDepth = 1.0f,
 			} });
 		cmd.setScissor(0, {
@@ -547,8 +485,8 @@ i32 aster_main() {
 				.extent = swapchain.extent,
 			} });
 
-		cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->pipeline);
-		cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline->layout->layout, 0, { descriptor_sets[frame_idx] }, {});
+		cmd.bindPipeline(pipeline->bind_point, pipeline->pipeline);
+		cmd.bindDescriptorSets(pipeline->bind_point, pipeline->layout->layout, 0, resource_sets[frame_idx].sets, {});
 		cmd.draw(4, 1, 0, 0);
 
 		cmd.endRenderPass();
@@ -565,31 +503,28 @@ i32 aster_main() {
 		result = device.device.resetFences({ current_frame->in_flight_fence });
 		ERROR_IF(failed(result), std::fmt("Fence reset failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Fence Reset");
 
+		// ======== Submit Commands ==================================================================================================================
 		{
 			OPTICK_EVENT("Submit");
-			vk::SubmitInfo submit_info = {
-				.waitSemaphoreCount = 1,
-				.pWaitSemaphores = &current_frame->image_available_sem,
-				.pWaitDstStageMask = &wait_stage,
-				.commandBufferCount = 1,
-				.pCommandBuffers = &cmd,
-				.signalSemaphoreCount = 1,
-				.pSignalSemaphores = &current_frame->render_finished_sem,
-			};
+			vk::SubmitInfo submit_info = vk::SubmitInfo{}
+			                             .setWaitSemaphores(current_frame->image_available_sem)
+			                             .setWaitDstStageMask(wait_stage)
+			                             .setCommandBuffers(cmd)
+			                             .setSignalSemaphores(current_frame->render_finished_sem);
 			result = device.queues.graphics.submit({ submit_info }, current_frame->in_flight_fence);
 
 			ERROR_IF(failed(result), std::fmt("Submission failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_VERBOSE("Submit");
 		}
 
+
+		// ======== Present ==================================================================================================================
 		{
 			OPTICK_EVENT("Present");
-			result = device.queues.present.presentKHR({
-				.waitSemaphoreCount = 1,
-				.pWaitSemaphores = &current_frame->render_finished_sem,
-				.swapchainCount = 1,
-				.pSwapchains = &swapchain.swapchain,
-				.pImageIndices = &image_idx,
-			});
+			result = device.queues.present.presentKHR(vk::PresentInfoKHR{}
+			                                          .setWaitSemaphores(current_frame->render_finished_sem)
+			                                          .setSwapchains(swapchain.swapchain)
+			                                          .setImageIndices(image_idx)
+			);
 			INFO_IF(result == vk::Result::eSuboptimalKHR, std::fmt("Swapchain %s suboptimal", swapchain.name.data()))
 			ELSE_IF_INFO(result == vk::Result::eErrorOutOfDateKHR, "Recreating Swapchain " + swapchain.name) DO(swapchain.recreate()) DO(recreate_framebuffers()) DO(Gui::Recreate())
 			ELSE_IF_ERROR(failed(result), std::fmt("Present failed with %s", to_cstr(result))) THEN_CRASH(result)
@@ -612,7 +547,7 @@ i32 aster_main() {
 		buf.destroy();
 	}
 
-	device.device.destroyDescriptorPool(descriptor_pool);
+	resource_pool.destroy();
 
 	pipeline->destroy();
 	for (auto& framebuffer_ : framebuffers) {

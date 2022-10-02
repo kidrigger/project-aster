@@ -24,7 +24,7 @@ Result<ImageView, vk::Result> ImageView::create(Image* _image, const vk::ImageVi
 
 	_image->parent_device->set_object_name(image_view, name);
 
-	return ImageView {
+	return ImageView{
 		.parent_image = _image,
 		.parent_device = _image->parent_device,
 		.image_view = image_view,

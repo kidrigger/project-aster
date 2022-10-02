@@ -20,7 +20,7 @@ struct Framebuffer {
 	u32 attachment_count;
 	name_t name;
 
-	static Result<Framebuffer, vk::Result> create(const std::string_view& _name, const RenderPass* _render_pass, const std::vector<ImageView>& _attachments, const u32 _layer_count);
+	static Result<Framebuffer, vk::Result> create(const std::string_view& _name, const RenderPass* _render_pass, const std::vector<ImageView>& _attachments, u32 _layer_count);
 
 	void destroy();
 };

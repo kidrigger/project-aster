@@ -38,7 +38,7 @@ Result<Framebuffer, vk::Result> Framebuffer::create(const std::string_view& _nam
 		_render_pass->attachment_format,
 		{ extent.width, extent.height },
 		cast<u32>(_attachments.size()),
-		name_t::from( _name ),
+		name_t::from(_name),
 	};
 }
 

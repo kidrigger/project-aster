@@ -1,6 +1,6 @@
 ﻿// =============================================
 //  Volumetric: sky_view_context.cpp
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include "sky_view_context.h"
@@ -18,14 +18,14 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 	const auto ubo_alignment = device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
 
 	ubo = Buffer::create("Sky View uniform buffer", device, closest_multiple(sizeof(Camera), ubo_alignment) + closest_multiple(sizeof(SunData), ubo_alignment) + closest_multiple(sizeof(AtmosphereInfo), ubo_alignment), vk::BufferUsageFlagBits::eUniformBuffer, vma::MemoryUsage::eCpuToGpu)
-		.expect(std::fmt("Skyview UBO creation failed with %s", to_cstr(err)));
+	      .expect(std::fmt("Skyview UBO creation failed with %s", to_cstr(err)));
 
 	ubo_writer = BufferWriter{ &ubo };
 
 	transmittance = _transmittance;
 
 	lut = Image::create("Sky View LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, sky_view_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)
-		.expect(std::fmt("Skyview LUT creation failed with %s", to_cstr(err)));
+	      .expect(std::fmt("Skyview LUT creation failed with %s", to_cstr(err)));
 
 	lut_view = ImageView::create(&lut, vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -73,7 +73,7 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 		.pDependencies = &dependency,
 	}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
 
-	tie(result, pipeline) = _pipeline_factory->create_pipeline({
+	pipeline = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
 		.viewport_state = {
 			.enable_dynamic = false,
@@ -99,11 +99,10 @@ SkyViewContext::SkyViewContext(PipelineFactory* _pipeline_factory, Transmittance
 		},
 		.shader_files = { R"(res/shaders/sky_view_lut.vs.spv)", R"(res/shaders/sky_view_lut.fs.spv)" },
 		.name = "Sky View LUT Pipeline",
-	});
-	ERROR_IF(failed(result), std::fmt("Skyview LUT Pipeline creation failed with %s", to_cstr(result)));
+	}).expect(std::fmt("Skyview LUT Pipeline creation failed with %s", to_cstr(err)));
 
 	framebuffer = Framebuffer::create("Skyview LUT FB", &renderpass, { lut_view }, 1)
-		.expect(std::fmt("Skyview LUT Framebuffer creation failed with %s", to_cstr(err)));
+	              .expect(std::fmt("Skyview LUT Framebuffer creation failed with %s", to_cstr(err)));
 
 	std::vector<vk::DescriptorPoolSize> pool_sizes = {
 		{

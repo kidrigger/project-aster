@@ -241,6 +241,7 @@ struct Pipeline {
 	std::vector<Shader*> shaders;
 	Layout* layout{};
 	vk::Pipeline pipeline;
+	vk::PipelineBindPoint bind_point;
 	std::string name;
 	usize hash{};
 
@@ -262,7 +263,7 @@ public:
 
 	~PipelineFactory();
 
-	vk::ResultValue<Pipeline*> create_pipeline(const PipelineCreateInfo& _create_info);
+	Result<Pipeline*, vk::Result> create_pipeline(const PipelineCreateInfo& _create_info);
 
 private:
 	void destroy_pipeline(Pipeline* _pipeline) noexcept;

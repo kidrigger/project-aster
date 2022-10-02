@@ -137,7 +137,7 @@ SubmitTask<Buffer> Device::upload_data(Buffer* _host_buffer, const std::span<u8>
 	ELSE_IF_WARN(_host_buffer->memory_usage != vma::MemoryUsage::eGpuOnly, std::fmt("Memory %s is not GPU only. Upload not required", _host_buffer->name.c_str()));
 
 	auto staging_buffer = Buffer::create(std::fmt("_stage %s", _host_buffer->name.c_str()), this, _data.size(), vk::BufferUsageFlagBits::eTransferSrc, vma::MemoryUsage::eCpuOnly)
-		.expect(std::fmt("Staging buffer creation failed with %s", to_cstr(err)));
+	                      .expect(std::fmt("Staging buffer creation failed with %s", to_cstr(err)));
 
 	update_data(&staging_buffer, _data);
 

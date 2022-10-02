@@ -42,8 +42,8 @@ Result<RenderPass, vk::Result> RenderPass::create(const std::string& _name, Devi
 		return make_error(result);
 	}
 	_device->set_object_name(rp, _name);
-	
-	auto renderpass = RenderPass{
+
+	const auto renderpass = RenderPass{
 		.renderpass = rp,
 		.name = name_t::from(_name),
 		.attachment_format = hash_value,

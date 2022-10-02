@@ -44,7 +44,7 @@ Error<Err> make_error(Err _err) {
 	return Error<Err>(_err);
 }
 
-#define expect(msg) map_error([](auto& err) -> void { ERROR((msg)) THEN_CRASH(err); }).value()
+#define expect(msg) map_error([&](auto&& err) -> void { ERROR((msg)) THEN_CRASH(err); }).value()
 
 constexpr u64 clog2(const u64 _in) {
 	if (_in == 1) {

@@ -18,7 +18,7 @@ Result<Buffer, vk::Result> Buffer::create(const std::string& _name, Device* _dev
 	if (failed(result)) {
 		return make_error(result);
 	}
-	
+
 	_device->set_object_name(buffer.first, _name);
 
 	return Buffer{

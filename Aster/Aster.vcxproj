@@ -197,6 +197,7 @@
     <ClCompile Include="core\image.cc" />
     <ClCompile Include="core\pipeline.cc" />
     <ClCompile Include="core\renderpass.cc" />
+    <ClCompile Include="core\resource_pool.cc" />
     <ClCompile Include="core\sampler.cc" />
     <ClCompile Include="global.cc" />
     <ClCompile Include="core\image_view.cc" />
@@ -235,6 +236,7 @@
     <ClInclude Include="core\image.h" />
     <ClInclude Include="core\pipeline.h" />
     <ClInclude Include="core\renderpass.h" />
+    <ClInclude Include="core\resource_pool.h" />
     <ClInclude Include="core\sampler.h" />
     <ClInclude Include="global.h" />
     <ClInclude Include="core\context.h" />

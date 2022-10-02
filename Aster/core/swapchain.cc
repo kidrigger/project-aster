@@ -89,7 +89,7 @@ Swapchain::Swapchain(const std::string_view& _name, Window* _window, Device* _de
 			.levelCount = 1,
 			.baseArrayLayer = 0,
 			.layerCount = 1,
-			}).expect(std::fmt("Image View Creation failed with %s", to_cstr(err)));
+		}).expect(std::fmt("Image View Creation failed with %s", to_cstr(err)));
 		VERBOSE(std::fmt("Image view %u created", i_++));
 	}
 
@@ -200,7 +200,7 @@ void Swapchain::recreate() {
 			.levelCount = 1,
 			.baseArrayLayer = 0,
 			.layerCount = 1,
-			}).expect(std::fmt("Image View Creation failed with %s", to_cstr(err)));
+		}).expect(std::fmt("Image View Creation failed with %s", to_cstr(err)));
 		VERBOSE(std::fmt("Image view %u created", i_++));
 	}
 

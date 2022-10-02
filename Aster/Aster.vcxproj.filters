@@ -39,6 +39,7 @@
     <ClCompile Include="core\image.cc" />
     <ClCompile Include="core\sampler.cc" />
     <ClCompile Include="core\framebuffer.cc" />
+    <ClCompile Include="core\resource_pool.cc" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="global.h" />
@@ -91,6 +92,7 @@
     <ClInclude Include="core\image_view.h" />
     <ClInclude Include="core\sampler.h" />
     <ClInclude Include="core\framebuffer.h" />
+    <ClInclude Include="core\resource_pool.h" />
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="res\shaders\shader.fs.hlsl" />

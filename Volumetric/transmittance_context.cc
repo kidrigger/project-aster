@@ -1,6 +1,6 @@
 ﻿// =============================================
 //  Volumetric: transmittance_context.cc
-//  Copyright (c) 2020-2021 Anish Bhobe
+//  Copyright (c) 2020-2022 Anish Bhobe
 // =============================================
 
 #include "transmittance_context.h"
@@ -19,7 +19,7 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 	const auto ubo_alignment = device->physical_device_properties.limits.minUniformBufferOffsetAlignment;
 
 	lut = Image::create("Transmittance LUT", device, vk::ImageType::e2D, vk::Format::eR16G16B16A16Sfloat, transmittance_lut_extent, vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled)
-	.expect(std::fmt("LUT Image could not be created with %s", to_cstr(err)));
+	      .expect(std::fmt("LUT Image could not be created with %s", to_cstr(err)));
 
 	lut_view = ImageView::create(&lut, vk::ImageViewType::e2D, {
 		.aspectMask = vk::ImageAspectFlagBits::eColor,
@@ -72,14 +72,14 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 		.pSubpasses = &subpass,
 		.dependencyCount = 1,
 		.pDependencies = &dependency
-		}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
+	}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
 	INFO(std::fmt("Renderpass %s Created", renderpass.name.c_str()));
 
 	// Framebuffer
 	framebuffer = Framebuffer::create("LUT Framebuffer", &renderpass, { lut_view }, 1)
-		.expect(std::fmt("LUT Framebuffer creation failed with %s", to_cstr(err)));
+	              .expect(std::fmt("LUT Framebuffer creation failed with %s", to_cstr(err)));
 
-	tie(result, pipeline) = _pipeline_factory->create_pipeline({
+	pipeline = _pipeline_factory->create_pipeline({
 		.renderpass = renderpass,
 		.viewport_state = {
 			.enable_dynamic = false,
@@ -105,8 +105,8 @@ TransmittanceContext::TransmittanceContext(PipelineFactory* _pipeline_factory, c
 		},
 		.shader_files = { R"(res/shaders/transmittance_lut.vs.spv)", R"(res/shaders/transmittance_lut.fs.spv)" },
 		.name = "LUT Pipeline",
-	});
-	ERROR_IF(failed(result), std::fmt("LUT Pipeline creation failed with %s", to_cstr(result))) THEN_CRASH(result) ELSE_INFO("LUT Pipeline Created");
+	}).expect(std::fmt("LUT Pipeline creation failed with %s", to_cstr(result)));
+	INFO("LUT Pipeline Created");
 
 	recalculate(_pipeline_factory, _atmos);
 }

@@ -11,7 +11,7 @@ Result<Sampler, vk::Result> Sampler::create(const std::string_view& _name, Devic
 	if (failed(result)) {
 		return make_error(result);
 	}
-	
+
 	_device->set_object_name(sampler, _name);
 	return Sampler{
 		.parent_device = _device,
@@ -27,7 +27,7 @@ Result<Sampler, vk::Result> Sampler::create(const std::string_view& _name, Devic
 		.lod = { .min = _create_info.minLod, .max = _create_info.maxLod },
 		.border_color = _create_info.borderColor,
 		.unnormalized_coordinates = cast<b8>(_create_info.unnormalizedCoordinates),
-		.name = name_t::from( _name ),
+		.name = name_t::from(_name),
 	};
 }
 

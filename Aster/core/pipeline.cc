@@ -347,7 +347,7 @@ vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 	std::vector<vk::DescriptorSetLayout> descriptor_set_layout;
 
 	if (_shader_info.descriptors.empty()) {
-		return vk::ResultValue(result, descriptor_set_layout);
+		return vk::ResultValue{ result, descriptor_set_layout };
 	}
 
 	std::vector<vk::DescriptorSetLayoutBinding> bindings;
@@ -373,7 +373,7 @@ vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 					parent_device->device.destroyDescriptorSetLayout(dsl_);
 				}
 				descriptor_set_layout.clear();
-				return vk::ResultValue(result, descriptor_set_layout);
+				return vk::ResultValue{ result, descriptor_set_layout };
 			}
 		}
 		current_set = dsi_.set;
@@ -390,11 +390,11 @@ vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 				parent_device->device.destroyDescriptorSetLayout(dsl_);
 			}
 			descriptor_set_layout.clear();
-			return vk::ResultValue(result, descriptor_set_layout);
+			return vk::ResultValue{ result, descriptor_set_layout };
 		}
 	}
 
-	return vk::ResultValue(result, descriptor_set_layout);
+	return vk::ResultValue{ result, descriptor_set_layout };
 }
 
 void merge_acc_descriptor(DescriptorInfo* _acc, DescriptorInfo& _info) {
@@ -515,7 +515,7 @@ vk::ResultValue<Layout*> PipelineFactory::create_pipeline_layout(const std::vect
 	return vk::ResultValue<Layout*>(result, &layout_);
 }
 
-vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreateInfo& _create_info) {
+Result<Pipeline*, vk::Result> PipelineFactory::create_pipeline(const PipelineCreateInfo& _create_info) {
 
 	vk::Pipeline pipeline;
 
@@ -523,15 +523,23 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 	if (pipeline_map_.contains(pipeline_key)) {
 		auto& entry_ = pipeline_map_[pipeline_key];
 		++entry_.first;
-		return vk::ResultValue(vk::Result::eSuccess, &entry_.second);
+		return &entry_.second;
 	}
 
 	auto [result, shaders] = create_shaders(_create_info.shader_files);
-	ERROR_IF(failed(result), "Shader creation failed");
+	if (failed(result)) [[unlikely]]
+	{
+		ERROR("Shader creation failed");
+		return make_error(result);
+	}
 
 	Layout* pipeline_layout;
 	tie(result, pipeline_layout) = create_pipeline_layout(shaders);
-	ERROR_IF(failed(result), std::fmt("Pipeline layout creation for %s failed with %s", _create_info.name.c_str(), to_cstr(result)));
+	if (failed(result)) [[unlikely]]
+	{
+		ERROR(std::fmt("Pipeline layout creation for %s failed with %s", _create_info.name.c_str(), to_cstr(result)));
+		return make_error(result);
+	}
 
 	std::vector<ShaderStage> shader_stages(shaders.size());
 	std::ranges::transform(shaders, shader_stages.begin(), [](Shader* _s) {
@@ -626,7 +634,11 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 		.layout = pipeline_layout->layout,
 		.renderPass = _create_info.renderpass.renderpass,
 	});
-	ERROR_IF(failed(result), std::fmt("Pipeline %s creation failed with %s", _create_info.name.c_str(), to_cstr(result)));
+	if (failed(result)) [[unlikely]]
+	{
+		ERROR(std::fmt("Pipeline %s creation failed with %s", _create_info.name.c_str(), to_cstr(result)));
+		return make_error(result);
+	}
 	parent_device->set_object_name(pipeline, _create_info.name);
 
 	auto& [key_, pipeline_] = pipeline_map_[pipeline_key] = {
@@ -635,13 +647,14 @@ vk::ResultValue<Pipeline*> PipelineFactory::create_pipeline(const PipelineCreate
 			.shaders = move(shaders),
 			.layout = pipeline_layout,
 			.pipeline = pipeline,
+			.bind_point = vk::PipelineBindPoint::eGraphics,
 			.name = _create_info.name,
 			.hash = pipeline_key,
 			.parent_factory = this,
 		}
 	};
 
-	return vk::ResultValue(result, &pipeline_);
+	return &pipeline_;
 };
 
 usize std::hash<ShaderInfo>::operator()(const ShaderInfo& _val) const noexcept {

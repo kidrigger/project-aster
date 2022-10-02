@@ -95,7 +95,7 @@ namespace ImGui {
 			.pSubpasses = &subpass,
 			.dependencyCount = 1,
 			.pDependencies = &dependency
-			}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
+		}).expect(std::fmt("Renderpass creation failed with %s", to_cstr(err)));
 		INFO("UI pass Created");
 
 		IMGUI_CHECKVERSION();
@@ -139,7 +139,7 @@ namespace ImGui {
 		framebuffers.reserve(_swapchain->image_count);
 		for (auto& iv : _swapchain->image_views) {
 			framebuffers.emplace_back() = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1)
-				.expect(std::fmt("GUI Framebuffer creation failed with %s", to_cstr(err)));
+			                              .expect(std::fmt("GUI Framebuffer creation failed with %s", to_cstr(err)));
 		}
 
 		result = task.wait_and_destroy();
@@ -167,7 +167,7 @@ namespace ImGui {
 		framebuffers.reserve(current_swapchain->image_count);
 		for (auto& iv : current_swapchain->image_views) {
 			framebuffers.emplace_back() = Framebuffer::create("GUI Framebuffer", &renderpass, { iv }, 1)
-				.expect(std::fmt("GUI Framebuffer creation failed with %s", to_cstr(err)));
+			                              .expect(std::fmt("GUI Framebuffer creation failed with %s", to_cstr(err)));
 		}
 	}
 

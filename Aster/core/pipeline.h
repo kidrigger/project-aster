@@ -163,16 +163,15 @@ struct PipelineCreateInfo {
 	RenderPass renderpass;
 
 	struct InputAttribute {
-		std::string_view attr_name;
 		u32 binding{ 0 };
 		u32 offset{ 0 };
+		u32 stride{ sizeof(u32) };
+		vk::VertexInputRate input_rate{ vk::VertexInputRate::eVertex };
 		vk::Format format{};
+		name_t attr_name;
 	};
 
-	struct {
-		std::vector<vk::VertexInputBindingDescription> bindings;
-		std::vector<InputAttribute> attributes;
-	} vertex_input;
+	std::vector<InputAttribute> vertex_input_attributes;
 
 	struct {
 		vk::PrimitiveTopology topology{ vk::PrimitiveTopology::eTriangleList };

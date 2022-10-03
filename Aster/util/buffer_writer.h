@@ -60,8 +60,20 @@ public:
 			return *this;
 		}
 
+		BufferWriterOStream& operator<<(nullptr_t) {
+			close();
+			return *this;
+		}
+
+		void close() {
+			if (writer_) {
+				writer_->end_mapping();
+				writer_ = nullptr;
+			}
+		}
+
 		~BufferWriterOStream() {
-			if (writer_) writer_->end_mapping();
+			close();
 		}
 
 	private:

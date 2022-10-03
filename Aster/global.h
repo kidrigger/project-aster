@@ -107,6 +107,7 @@ constexpr usize closest_multiple(usize _val, usize _of) {
 }
 
 constexpr usize MAX_NAME_LENGTH = 31;
+
 struct name_t {
 	constexpr static usize SIZE = MAX_NAME_LENGTH + 1;
 	constexpr static char END_CHAR = '\0';
@@ -118,7 +119,8 @@ struct name_t {
 	}
 
 	static name_t from(const std::string_view& _str) {
-		name_t n;
+		WARN_IF(_str.size() > MAX_NAME_LENGTH, std::fmt("Name longer than %d characters, truncating automatically.", MAX_NAME_LENGTH));
+		name_t n = {};
 		n.write(_str);
 		return n;
 	}
@@ -128,7 +130,17 @@ struct name_t {
 		return *this;
 	}
 
-	[[nodiscard]] const c8* c_str() const { return data; }
+	[[nodiscard]] const c8* c_str() const {
+		return data;
+	}
+};
+
+template <>
+struct std::hash<name_t> {
+	[[nodiscard]]
+	usize operator()(const name_t& _val) const noexcept {
+		return std::hash<std::string_view>()(_val.c_str());
+	}
 };
 
 static_assert(std::is_trivially_copyable_v<name_t>);

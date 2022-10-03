@@ -143,7 +143,7 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 			VERBOSE(std::fmt("IN %s %d %s", iv->name, iv->location, to_string(cast<vk::Format>(iv->format)).c_str()));
 			auto name = std::string_view(iv->name);
 			input_variables.emplace_back() = {
-				.name = std::string(name.substr(name.find_last_of('.'))),
+				.name = std::string(name.substr(name.find_last_of('.') + 1)),
 				.location = iv->location,
 				.format = cast<vk::Format>(iv->format),
 			};
@@ -168,7 +168,7 @@ vk::ResultValue<Shader*> PipelineFactory::create_shader_module(const std::string
 			VERBOSE(std::fmt("OUT %s %d %s", iv->name, iv->location, to_string(cast<vk::Format>(iv->format)).c_str()));
 			auto name = std::string_view(iv->name);
 			output_variables.emplace_back() = {
-				.name = std::string(name.substr(name.find_last_of('.'))),
+				.name = std::string(name.substr(name.find_last_of('.') + 1)),
 				.location = iv->location,
 				.format = cast<vk::Format>(iv->format),
 			};
@@ -253,6 +253,7 @@ vk::ResultValue<std::vector<Shader*>> PipelineFactory::create_shaders(const std:
 		tie(res, shaders.emplace_back()) = create_shader_module(name);
 		ERROR_IF(failed(res), std::fmt("Shader %s creation failed with %s", name.data(), to_cstr(res)));
 		if (failed(res)) {
+			shaders.pop_back(); // Failed emplace
 			for (auto& shader_ : shaders) {
 				parent_device->device.destroyShaderModule(shader_->stage.shaderModule);
 			}
@@ -369,6 +370,7 @@ vk::ResultValue<std::vector<vk::DescriptorSetLayout>> PipelineFactory::create_de
 			bindings.clear();
 			ERROR_IF(failed(result), std::fmt("Set %d creation failed with %s", current_set, to_cstr(result)));
 			if (failed(result)) {
+				descriptor_set_layout.pop_back();
 				for (auto& dsl_ : descriptor_set_layout) {
 					parent_device->device.destroyDescriptorSetLayout(dsl_);
 				}
@@ -546,29 +548,37 @@ Result<Pipeline*, vk::Result> PipelineFactory::create_pipeline(const PipelineCre
 		return _s->stage;
 	});
 
-	std::vector<vk::VertexInputAttributeDescription> input_attributes(pipeline_layout->layout_info.input_vars.size());
+	std::vector<vk::VertexInputAttributeDescription> input_attributes;
+	input_attributes.reserve(pipeline_layout->layout_info.input_vars.size());
+	std::vector<vk::VertexInputBindingDescription> input_bindings;
+	input_bindings.reserve(pipeline_layout->layout_info.input_vars.size());
 	for (auto& ivs : pipeline_layout->layout_info.input_vars) {
-		const auto& in_attr = _create_info.vertex_input.attributes;
-		auto match_iv = std::ranges::find_if(in_attr, [&_name = ivs.name](auto& _ia) {
-			return _ia.attr_name == _name;
+		const auto& in_attr = _create_info.vertex_input_attributes;
+		auto match_iv = std::ranges::find_if(in_attr, [_name = std::string_view(ivs.name)](auto& _ia) {
+			return _name == _ia.attr_name.c_str();
 		});
 		ERROR_IF(match_iv == in_attr.end(), std::fmt("Attribute %s required by shader, not found", ivs.name.c_str()))
 		ELSE_IF_ERROR(match_iv->format != ivs.format, std::fmt("Attribute %s has mismatching formats (exp: %s, found: %s)", ivs.name.c_str(), to_cstr(ivs.format), to_cstr(match_iv->format)));
 
-		input_attributes[ivs.location] = {
+		input_attributes.push_back({
 			.location = ivs.location,
 			.binding = match_iv->binding,
 			.format = ivs.format,
 			.offset = 0,
-		};
+		});
 	}
 
-	vk::PipelineVertexInputStateCreateInfo visci = {
-		.vertexBindingDescriptionCount = cast<u32>(_create_info.vertex_input.bindings.size()),
-		.pVertexBindingDescriptions = _create_info.vertex_input.bindings.data(),
-		.vertexAttributeDescriptionCount = cast<u32>(input_attributes.size()),
-		.pVertexAttributeDescriptions = input_attributes.data(),
-	};
+	for (const auto& _ia : _create_info.vertex_input_attributes) {
+		input_bindings.push_back({
+			.binding = _ia.binding,
+			.stride = _ia.stride,
+			.inputRate = _ia.input_rate,
+		});
+	}
+
+	auto visci = vk::PipelineVertexInputStateCreateInfo{}
+	             .setVertexBindingDescriptions(input_bindings)
+	             .setVertexAttributeDescriptions(input_attributes);
 
 	vk::PipelineInputAssemblyStateCreateInfo iasci = {
 		.topology = _create_info.input_assembly.topology,
@@ -576,12 +586,16 @@ Result<Pipeline*, vk::Result> PipelineFactory::create_pipeline(const PipelineCre
 	};
 
 	b32 enable_dynamic = _create_info.viewport_state.enable_dynamic;
-	vk::PipelineViewportStateCreateInfo vsci = {
-		.viewportCount = cast<u32>(_create_info.viewport_state.viewports.size()),
-		.pViewports = enable_dynamic ? nullptr : _create_info.viewport_state.viewports.data(),
-		.scissorCount = cast<u32>(_create_info.viewport_state.scissors.size()),
-		.pScissors = enable_dynamic ? nullptr : _create_info.viewport_state.scissors.data(),
-	};
+	vk::PipelineViewportStateCreateInfo vsci;
+	if (enable_dynamic) {
+		vsci
+		.setViewportCount(cast<u32>(_create_info.viewport_state.viewports.size()))
+		.setScissorCount(cast<u32>(_create_info.viewport_state.scissors.size()));
+	} else {
+		vsci
+		.setViewports(_create_info.viewport_state.viewports)
+		.setScissors(_create_info.viewport_state.scissors);
+	}
 
 	vk::PipelineRasterizationStateCreateInfo rsci = {
 		.depthClampEnable = _create_info.raster_state.depth_clamp_enabled,
@@ -684,12 +698,10 @@ usize std::hash<PipelineCreateInfo>::operator()(const PipelineCreateInfo& _value
 	auto hash_val = hash_any(_value.renderpass.attachment_format);
 	{
 		// vertex input
-		for (const auto& binding_ : _value.vertex_input.bindings) {
-			hash_val = hash_combine(hash_val, hash_any(binding_.binding));
-			hash_val = hash_combine(hash_val, hash_any(binding_.inputRate));
-		}
-		for (const auto& attr_ : _value.vertex_input.attributes) {
+		for (const auto& attr_ : _value.vertex_input_attributes) {
 			hash_val = hash_combine(hash_val, hash_any(attr_.binding));
+			hash_val = hash_combine(hash_val, hash_any(attr_.input_rate));
+			hash_val = hash_combine(hash_val, hash_any(attr_.stride));
 			hash_val = hash_combine(hash_val, hash_any(attr_.attr_name));
 			hash_val = hash_combine(hash_val, hash_any(attr_.format));
 			hash_val = hash_combine(hash_val, hash_any(attr_.offset));

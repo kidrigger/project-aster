@@ -1,7 +1,7 @@
-/*=========================================*/
-/*  Aster: res/shaders/functions.hlsli     */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Volumetric: functions.hlsli
+//  Copyright (c) 2020-2022 Anish Bhobe
+// =============================================
 
 #ifndef _FUNCTIONS_HLSLI
 #define _FUNCTIONS_HLSLI

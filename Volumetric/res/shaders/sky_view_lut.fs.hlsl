@@ -1,7 +1,7 @@
-/*==============================================*/
-/*  Aster: res/shaders/sky_view_lut.fs.hlsl		*/
-/*  Copyright (c) 2020 Anish Bhobe				*/
-/*==============================================*/
+// =============================================
+//  Volumetric: sky_view_lut.fs.hlsl
+//  Copyright (c) 2020-2022 Anish Bhobe
+// =============================================
 
 #include "sky_view_lut.hlsli"
 

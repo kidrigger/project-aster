@@ -1,7 +1,7 @@
-/*=========================================*/
-/*  Aster: res/shaders/structs.hlsli       */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Volumetric: structs.hlsli
+//  Copyright (c) 2020-2022 Anish Bhobe
+// =============================================
 
 #ifndef _STRUCTS_HLSLI
 #define _STRUCTS_HLSLI

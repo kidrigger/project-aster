@@ -1,7 +1,7 @@
-/*=================================================*/
-/*  Aster: res/shaders/transmittance_lut.vs.hlsl   */
-/*  Copyright (c) 2020 Anish Bhobe                 */
-/*=================================================*/
+// =============================================
+//  Volumetric: transmittance_lut.fs.hlsl
+//  Copyright (c) 2020-2022 Anish Bhobe
+// =============================================
 
 #include "structs.hlsli"
 [[vk::push_constant]] AtmosphereParams atmosphere;

@@ -1,7 +1,7 @@
-/*=================================================*/
-/*  Aster: res/shaders/transmittance_lut.vs.hlsl   */
-/*  Copyright (c) 2020 Anish Bhobe                 */
-/*=================================================*/
+// =============================================
+//  Volumetric: transmittance_lut.vs.hlsl
+//  Copyright (c) 2020-2022 Anish Bhobe
+// =============================================
 
 struct VSIn {
 	int idx : SV_VERTEXID;

@@ -1,7 +1,7 @@
-/*=========================================*/
-/*  Aster: res/shaders/hillaire.fs.hlsl    */
-/*  Copyright (c) 2020 Anish Bhobe         */
-/*=========================================*/
+// =============================================
+//  Volumetric: hillaire.fs.hlsl
+//  Copyright (c) 2020-2022 Anish Bhobe
+// =============================================
 
 #include "hillaire.hlsli"
 
